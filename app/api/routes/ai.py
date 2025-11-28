@@ -69,9 +69,9 @@ async def predict(request: PredictRequest) -> PredictResponse:
     try:
         model = get_model()
 
-        if not model.is_loaded():
+        if not model.is_classifier_loaded():
             raise HTTPException(
-                status_code=503, detail="Model not loaded. Please train first."
+                status_code=503, detail="Classifier not loaded. Please train first."
             )
 
         features = np.array(request.features)
@@ -109,7 +109,7 @@ async def train_model(request: TrainRequest) -> TrainResponse:
 
         # Save model
         trading_model = TradingModel(settings.ai)
-        trading_model.set_model(model, feature_names)
+        trading_model.set_classifier(model, feature_names)
         trading_model.save()
 
         # Update global model
@@ -138,6 +138,8 @@ async def model_status() -> dict:
     model = get_model()
     return {
         "loaded": model.is_loaded(),
+        "classifier_loaded": model.is_classifier_loaded(),
+        "regressor_loaded": model.is_regressor_loaded(),
         "model_path": settings.ai.model_path,
         "feature_count": len(model.feature_names) if model.feature_names else 0,
     }

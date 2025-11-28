@@ -112,7 +112,8 @@ class PriceStream:
             except Exception as e:
                 logger.error(
                     f"Error fetching orderbook from {exchange_name} "
-                    f"for {symbol}: {e}"
+                    f"for {symbol}: {str(e)}",
+                    exc_info=True
                 )
 
             # Wait before next poll

@@ -7,7 +7,7 @@ A lightweight, production-oriented arbitrage trading bot that detects and execut
 - **Arbitrage Detection**: Real-time detection of price differences between exchanges
 - **AI-Powered Decisions**: XGBoost model for optimizing maker vs taker order selection
 - **Async Architecture**: Fully asynchronous Python implementation for high performance
-- **Multiple Exchanges**: Support for Nobitex and Wallex exchanges (extensible)
+- **Multiple Exchanges**: Support for Nobitex, Wallex, KuCoin, Invex, and Tabdeal exchanges (extensible)
 - **Backtesting**: Historical data replay for strategy validation
 - **REST API**: FastAPI-based monitoring and control interface
 - **Fee Optimization**: Minimizes trading fees through intelligent order type selection
@@ -23,7 +23,10 @@ project/
 │   ├── exchanges/        # Exchange interfaces
 │   │   ├── base.py
 │   │   ├── nobitex.py
-│   │   └── wallex.py
+│   │   ├── wallex.py
+│   │   ├── kucoin.py
+│   │   ├── invex.py
+│   │   └── tabdeal.py
 │   ├── strategy/         # Trading strategies
 │   │   ├── arbitrage_engine.py
 │   │   ├── order_executor.py
@@ -57,34 +60,75 @@ project/
 
 ### Prerequisites
 
-- Python 3.11 or higher
-- pip package manager
+- Python 3.12 (recommended) or Python 3.11+
+- Internet connection for downloading packages
 
 ### Setup
 
-1. Clone the repository:
+**Quick Setup (Recommended):**
+
+Use the provided setup script which handles the ensurepip issue:
+
+```bash
+cd /home/ali/Desktop/sarbazi/code/ps2
+chmod +x setup.sh
+./setup.sh
+```
+
+**Manual Setup:**
+
+1. Navigate to the project directory:
 ```bash
 cd /home/ali/Desktop/sarbazi/code/ps2
 ```
 
-2. Create a virtual environment:
+2. Create a virtual environment (if `ensurepip` is not available, use `--without-pip`):
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3.12 -m venv venv --without-pip
 ```
 
-3. Install dependencies:
+3. Install pip manually (if needed):
 ```bash
-pip install -r requirements.txt
+python3.12 -c "import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')"
+./venv/bin/python3.12 get-pip.py
+rm get-pip.py
 ```
 
-4. Create a `.env` file for configuration:
+4. Install dependencies:
 ```bash
-# Exchange API credentials
-NOBITEX_API_KEY=your_nobitex_api_key
-NOBITEX_API_SECRET=your_nobitex_api_secret
+./venv/bin/pip install --upgrade pip setuptools wheel
+./venv/bin/pip install -r requirements.txt
+```
+
+**Note:** If your system Python 3.12 doesn't have `ensurepip` (common on some Linux distributions), the setup script automatically handles this by installing pip manually.
+
+5. Create a `.env` file for configuration (optional):
+```bash
+# Exchange API credentials (configure only the exchanges you want to use)
+
+# Nobitex - Token-based authentication (choose one method)
+# Option 1: Direct token (if you have it from dashboard)
+NOBITEX_TOKEN=your_token_here
+# Option 2: Username/password (will auto-login and get token)
+NOBITEX_USERNAME=your_username
+NOBITEX_PASSWORD=your_password
+
+# Wallex
 WALLEX_API_KEY=your_wallex_api_key
 WALLEX_API_SECRET=your_wallex_api_secret
+
+# KuCoin
+KUCOIN_API_KEY=your_kucoin_api_key
+KUCOIN_API_SECRET=your_kucoin_api_secret
+KUCOIN_API_PASSPHRASE=your_kucoin_passphrase
+
+# Invex - RSA signature authentication
+INVEX_API_KEY=your_invex_api_key
+INVEX_API_SECRET=your_hex_encoded_private_key_here
+
+# Tabdeal
+TABDEAL_API_KEY=your_tabdeal_api_key
+TABDEAL_API_SECRET=your_tabdeal_api_secret
 
 # Trading configuration
 TRADING_MIN_SPREAD_PERCENT=0.5
@@ -104,10 +148,27 @@ API_PORT=8000
 
 ### Running the API Server
 
-Start the FastAPI server:
+**Quick Start (Recommended):**
+
+Use the provided run script:
 
 ```bash
+./run.sh
+```
+
+**Manual Start:**
+
+Activate the virtual environment and run:
+
+```bash
+source venv/bin/activate
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Or use the venv Python directly:
+
+```bash
+./venv/bin/python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 The API will be available at `http://localhost:8000`. Interactive API documentation is available at `http://localhost:8000/docs`.
@@ -186,6 +247,22 @@ print(simulator.get_summary())
 
 ## Configuration
 
+### Logging Level
+
+The default logging level is set to `DEBUG` for detailed development logs. You can change it by setting the `LOG_LEVEL` environment variable:
+
+```bash
+# In .env file or environment
+LOG_LEVEL=INFO    # Less verbose (recommended for production)
+LOG_LEVEL=DEBUG   # Detailed logs (default, recommended for development)
+LOG_LEVEL=WARNING # Only warnings and errors
+LOG_LEVEL=ERROR   # Only errors
+```
+
+Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+
+## Configuration
+
 Configuration is managed through environment variables and Pydantic settings. Key settings include:
 
 - **Exchange Configuration**: API keys, base URLs, maker/taker fees
@@ -242,7 +319,16 @@ Run specific test files:
 pytest tests/test_arbitrage.py -v
 pytest tests/test_ai.py -v
 pytest tests/test_executor.py -v
+pytest tests/test_exchanges_integration.py -v
+pytest tests/test_api_enum_validation.py -v
 ```
+
+### Test Coverage
+
+- **Integration Tests**: Exchange API implementations (orderbook, orders, balance, OHLC)
+- **Unit Tests**: Exchange interfaces, authentication, symbol conversion
+- **API Tests**: Enum validation, error handling, endpoint functionality
+- **Error Handling Tests**: Network errors, API errors, invalid responses
 
 ## Development
 

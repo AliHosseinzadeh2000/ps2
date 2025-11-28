@@ -4,6 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import ai, health, metrics, orders
+from app.api.services import (
+    close_exchanges,
+    get_arbitrage_engine,
+    get_exchanges,
+    get_order_executor,
+    get_price_stream,
+)
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -36,15 +43,32 @@ app.include_router(ai.router)
 @app.on_event("startup")
 async def startup_event() -> None:
     """Startup event handler."""
-    # TODO: Initialize exchanges, load model, start price stream, etc.
-    pass
+    # Initialize exchanges, arbitrage engine, and order executor
+    get_exchanges()
+    arbitrage_engine = get_arbitrage_engine()
+    get_order_executor()
+    
+    # Initialize and start price stream with default symbols
+    price_stream = get_price_stream()
+    # Subscribe arbitrage engine to price updates
+    price_stream.subscribe(arbitrage_engine.on_price_update)
+    
+    # Start price stream for default symbols (can be configured)
+    default_symbols = getattr(settings.trading, "default_symbols", ["BTCUSDT", "ETHUSDT"])
+    await price_stream.start(default_symbols)
 
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Shutdown event handler."""
-    # TODO: Close exchange connections, stop price stream, etc.
-    pass
+    # Stop price stream
+    from app.api.services import get_price_stream
+    price_stream = get_price_stream()
+    if price_stream.is_running():
+        await price_stream.stop()
+    
+    # Close exchange connections
+    await close_exchanges()
 
 
 @app.get("/")
@@ -60,4 +84,3 @@ async def root() -> dict:
         "version": "1.0.0",
         "status": "running",
     }
-

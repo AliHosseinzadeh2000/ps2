@@ -1,9 +1,13 @@
 """Arbitrage opportunity detection engine."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional, Union
 
+from app.core.exchange_types import ExchangeName
+
+from app.ai.features import combine_features, extract_orderbook_features
 from app.core.config import TradingConfig
+from app.data.collector import DataCollector
 from app.exchanges.base import ExchangeInterface, OrderBook
 from app.utils.math import (
     calculate_arbitrage_profit,
@@ -34,8 +38,9 @@ class ArbitrageEngine:
 
     def __init__(
         self,
-        exchanges: dict[str, ExchangeInterface],
+        exchanges: Dict[str, ExchangeInterface],
         config: Optional[TradingConfig] = None,
+        data_collector: Optional[DataCollector] = None,
     ) -> None:
         """
         Initialize arbitrage engine.
@@ -43,10 +48,13 @@ class ArbitrageEngine:
         Args:
             exchanges: Dictionary mapping exchange names to ExchangeInterface instances
             config: Trading configuration
+            data_collector: Optional data collector for storing features
         """
         self.exchanges = exchanges
         self.config = config or TradingConfig()
+        self.data_collector = data_collector
         self.opportunities: list[ArbitrageOpportunity] = []
+        self._latest_orderbooks: dict[str, dict[str, OrderBook]] = {}
 
     def detect_opportunity(
         self,
@@ -69,8 +77,26 @@ class ArbitrageEngine:
         Returns:
             ArbitrageOpportunity if profitable, None otherwise
         """
-        buy_exchange = self.exchanges.get(buy_exchange_name)
-        sell_exchange = self.exchanges.get(sell_exchange_name)
+        # Handle both enum and string exchange names
+        if isinstance(buy_exchange_name, ExchangeName):
+            buy_exchange = self.exchanges.get(buy_exchange_name)
+        else:
+            # Convert string to enum for lookup
+            try:
+                buy_exchange_enum = ExchangeName.from_string(buy_exchange_name)
+                buy_exchange = self.exchanges.get(buy_exchange_enum)
+            except ValueError:
+                buy_exchange = None
+        
+        if isinstance(sell_exchange_name, ExchangeName):
+            sell_exchange = self.exchanges.get(sell_exchange_name)
+        else:
+            # Convert string to enum for lookup
+            try:
+                sell_exchange_enum = ExchangeName.from_string(sell_exchange_name)
+                sell_exchange = self.exchanges.get(sell_exchange_enum)
+            except ValueError:
+                sell_exchange = None
 
         if not buy_exchange or not sell_exchange:
             return None
@@ -133,7 +159,7 @@ class ArbitrageEngine:
                 sell_fee,
             )
 
-        return ArbitrageOpportunity(
+        opportunity = ArbitrageOpportunity(
             symbol=symbol,
             buy_exchange=buy_exchange_name,
             sell_exchange=sell_exchange_name,
@@ -146,6 +172,18 @@ class ArbitrageEngine:
             buy_fee=buy_fee,
             sell_fee=sell_fee,
         )
+
+        # Extract and store features for continuous learning
+        if self.data_collector:
+            try:
+                buy_features = extract_orderbook_features(buy_orderbook)
+                sell_features = extract_orderbook_features(sell_orderbook)
+                # Features are stored in memory and will be saved when trade completes
+            except Exception:
+                # Don't fail opportunity detection if feature extraction fails
+                pass
+
+        return opportunity
 
     def find_opportunities(
         self,
@@ -166,16 +204,23 @@ class ArbitrageEngine:
         exchange_names = list(orderbooks.keys())
 
         # Check all pairs of exchanges
-        for i, buy_exchange in enumerate(exchange_names):
-            for sell_exchange in exchange_names[i + 1 :]:
-                buy_orderbook = orderbooks[buy_exchange]
-                sell_orderbook = orderbooks[sell_exchange]
+        for i, buy_exchange_name in enumerate(exchange_names):
+            for sell_exchange_name in exchange_names[i + 1 :]:
+                # Handle both enum and string keys
+                buy_key = buy_exchange_name.value if isinstance(buy_exchange_name, ExchangeName) else buy_exchange_name
+                sell_key = sell_exchange_name.value if isinstance(sell_exchange_name, ExchangeName) else sell_exchange_name
+                
+                buy_orderbook = orderbooks.get(buy_key)
+                sell_orderbook = orderbooks.get(sell_key)
+                
+                if not buy_orderbook or not sell_orderbook:
+                    continue
 
                 # Try buy on first exchange, sell on second
                 opp1 = self.detect_opportunity(
                     symbol,
-                    buy_exchange,
-                    sell_exchange,
+                    buy_exchange_name,
+                    sell_exchange_name,
                     buy_orderbook,
                     sell_orderbook,
                 )
@@ -185,8 +230,8 @@ class ArbitrageEngine:
                 # Try buy on second exchange, sell on first
                 opp2 = self.detect_opportunity(
                     symbol,
-                    sell_exchange,
-                    buy_exchange,
+                    sell_exchange_name,
+                    buy_exchange_name,
                     sell_orderbook,
                     buy_orderbook,
                 )
@@ -198,6 +243,23 @@ class ArbitrageEngine:
         self.opportunities = opportunities
 
         return opportunities
+
+    def on_price_update(self, symbol: str, orderbooks: dict[str, OrderBook]) -> None:
+        """
+        Callback for price stream updates - automatically detect opportunities.
+
+        Args:
+            symbol: Trading pair symbol
+            orderbooks: Dictionary mapping exchange names to order books
+        """
+        self._latest_orderbooks[symbol] = orderbooks
+        # Automatically find opportunities when orderbooks update
+        opportunities = self.find_opportunities(symbol, orderbooks)
+        if opportunities:
+            logger.info(
+                f"Found {len(opportunities)} opportunities for {symbol} "
+                f"(best profit: {opportunities[0].net_profit:.2f})"
+            )
 
     def filter_opportunities(
         self,

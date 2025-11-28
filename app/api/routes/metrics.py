@@ -1,10 +1,15 @@
 """Trading metrics endpoints."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 
+from app.api.services import get_arbitrage_engine, get_exchanges, get_order_executor
+from app.core.exchange_types import ExchangeName, TradingSymbol
+from app.core.logging import get_logger
+
 router = APIRouter(prefix="/metrics", tags=["metrics"])
+logger = get_logger(__name__)
 
 
 class TradingMetrics(BaseModel):
@@ -12,18 +17,25 @@ class TradingMetrics(BaseModel):
 
     total_trades: int = 0
     profitable_trades: int = 0
+    successful_trades: int = 0
     total_profit: float = 0.0
     total_volume: float = 0.0
     win_rate: float = 0.0
     active_opportunities: int = 0
+    # AI performance metrics
+    ai_accuracy: float = 0.0
+    ai_confidence: float = 0.0
+    maker_profit: float = 0.0
+    taker_profit: float = 0.0
+    confidence_stats: Optional[Dict[str, float]] = None
 
 
 class OpportunityMetrics(BaseModel):
     """Opportunity metrics."""
 
-    symbol: str
-    buy_exchange: str
-    sell_exchange: str
+    symbol: str  # Keep as string in response for flexibility
+    buy_exchange: str  # Keep as string in response for flexibility
+    sell_exchange: str  # Keep as string in response for flexibility
     spread_percent: float
     net_profit: float
     max_quantity: float
@@ -42,36 +54,119 @@ _metrics_store: Dict = {
 @router.get("", response_model=TradingMetrics)
 async def get_metrics() -> TradingMetrics:
     """
-    Get trading metrics.
+    Get trading metrics including AI performance.
 
     Returns:
-        Current trading metrics
+        Current trading metrics with AI performance data
     """
+    executor = get_order_executor()
+    monitor = executor.monitor
+
+    # Get prediction and trade metrics
+    pred_metrics = monitor.get_prediction_metrics(hours=24)
+    trade_metrics = monitor.get_trade_metrics(hours=24)
+    confidence_stats = monitor.get_model_confidence_stats()
+
     return TradingMetrics(
-        total_trades=_metrics_store["total_trades"],
-        profitable_trades=_metrics_store["profitable_trades"],
-        total_profit=_metrics_store["total_profit"],
-        total_volume=_metrics_store["total_volume"],
-        win_rate=(
-            _metrics_store["profitable_trades"] / _metrics_store["total_trades"] * 100.0
-            if _metrics_store["total_trades"] > 0
+        total_trades=trade_metrics.total_trades,
+        profitable_trades=trade_metrics.successful_trades,
+        successful_trades=trade_metrics.successful_trades,
+        total_profit=trade_metrics.total_profit,
+        total_volume=0.0,  # Can be calculated from trade history if needed
+        win_rate=trade_metrics.win_rate * 100.0,
+        active_opportunities=len(_metrics_store["opportunities"]),
+        ai_accuracy=(
+            pred_metrics.correct_predictions / pred_metrics.total_predictions
+            if pred_metrics.total_predictions > 0
             else 0.0
         ),
-        active_opportunities=len(_metrics_store["opportunities"]),
+        ai_confidence=pred_metrics.avg_confidence,
+        maker_profit=pred_metrics.maker_profit,
+        taker_profit=pred_metrics.taker_profit,
+        confidence_stats=confidence_stats if confidence_stats else None,
     )
 
 
 @router.get("/opportunities", response_model=List[OpportunityMetrics])
-async def get_opportunities() -> List[OpportunityMetrics]:
+async def get_opportunities(
+    symbol: TradingSymbol = Query(TradingSymbol.BTCUSDT, description="Trading pair symbol to check")
+) -> List[OpportunityMetrics]:
     """
     Get current arbitrage opportunities.
+
+    Args:
+        symbol: Trading pair symbol to check (default: BTCUSDT)
 
     Returns:
         List of current opportunities
     """
-    return [
-        OpportunityMetrics(**opp) for opp in _metrics_store["opportunities"]
-    ]
+    try:
+        exchanges = get_exchanges()
+        engine = get_arbitrage_engine()
+        
+        symbol_str = symbol.value
+        
+        # Try to fetch real orderbooks
+        orderbooks = {}
+        failed_exchanges = []
+        for name, exchange in exchanges.items():
+            try:
+                orderbook = await exchange.fetch_orderbook(symbol_str)
+                # Store with enum value as key for consistency
+                orderbooks[name.value if hasattr(name, 'value') else str(name)] = orderbook
+                logger.debug(f"Successfully fetched orderbook from {name.value if hasattr(name, 'value') else name} for {symbol_str}")
+            except Exception as e:
+                exchange_name_str = name.value if hasattr(name, 'value') else str(name)
+                logger.error(f"Failed to fetch orderbook from {exchange_name_str} for {symbol_str}: {e}", exc_info=True)
+                failed_exchanges.append(exchange_name_str)
+        
+        if len(orderbooks) < 2:
+            error_msg = (
+                f"Not enough orderbooks fetched for {symbol_str}. "
+                f"Got {len(orderbooks)} orderbook(s), need at least 2. "
+                f"Failed exchanges: {failed_exchanges if failed_exchanges else 'None'}"
+            )
+            logger.error(error_msg)
+            raise HTTPException(
+                status_code=503,
+                detail=error_msg
+            )
+        
+        # Find opportunities
+        opportunities = engine.find_opportunities(symbol_str, orderbooks)
+        
+        # Update store
+        _metrics_store["opportunities"] = [
+            {
+                "symbol": opp.symbol,
+                "buy_exchange": opp.buy_exchange,
+                "sell_exchange": opp.sell_exchange,
+                "spread_percent": opp.spread_percent,
+                "net_profit": opp.net_profit,
+                "max_quantity": opp.max_quantity,
+            }
+            for opp in opportunities
+        ]
+        
+        return [
+            OpportunityMetrics(
+                symbol=opp.symbol,
+                buy_exchange=opp.buy_exchange,
+                sell_exchange=opp.sell_exchange,
+                spread_percent=opp.spread_percent,
+                net_profit=opp.net_profit,
+                max_quantity=opp.max_quantity,
+            )
+            for opp in opportunities
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching opportunities: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch opportunities: {str(e)}"
+        )
 
 
 @router.post("/update")

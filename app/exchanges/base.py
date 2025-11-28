@@ -49,6 +49,18 @@ class Order(BaseModel):
     timestamp: float
 
 
+class OHLCData(BaseModel):
+    """OHLC (Open, High, Low, Close) candlestick data."""
+
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    timestamp: float
+    symbol: str
+
+
 class ExchangeInterface(ABC):
     """Abstract interface for cryptocurrency exchanges."""
 
@@ -140,6 +152,78 @@ class ExchangeInterface(ABC):
 
         Raises:
             Exception: If balance fetch fails
+        """
+        pass
+
+    async def fetch_ohlc(
+        self,
+        symbol: str,
+        interval: str = "1m",
+        limit: int = 100,
+    ) -> List[OHLCData]:
+        """
+        Fetch OHLC (candlestick) data for a trading pair.
+
+        Args:
+            symbol: Trading pair symbol (e.g., 'BTCUSDT')
+            interval: Time interval (e.g., '1m', '5m', '1h', '1d')
+            limit: Number of candles to fetch
+
+        Returns:
+            List of OHLCData objects, sorted by timestamp (oldest first)
+
+        Raises:
+            Exception: If OHLC fetch fails
+        """
+        # Default implementation - exchanges should override
+        raise NotImplementedError(
+            f"fetch_ohlc not implemented for {self.__class__.__name__}"
+        )
+
+    async def get_open_orders(
+        self, symbol: Optional[str] = None
+    ) -> List[Order]:
+        """
+        Get open orders for the account.
+
+        Args:
+            symbol: Optional trading pair symbol to filter by (None for all)
+
+        Returns:
+            List of open Order objects
+
+        Raises:
+            Exception: If fetching open orders fails
+        """
+        # Default implementation - exchanges should override
+        raise NotImplementedError(
+            f"get_open_orders not implemented for {self.__class__.__name__}"
+        )
+
+    @abstractmethod
+    async def get_order(self, order_id: str, symbol: str) -> Order:
+        """
+        Get order details by order ID.
+
+        Args:
+            order_id: Order ID to fetch
+            symbol: Trading pair symbol
+
+        Returns:
+            Order object with current status and fill information
+
+        Raises:
+            Exception: If order fetch fails or order not found
+        """
+        pass
+
+    @abstractmethod
+    def is_authenticated(self) -> bool:
+        """
+        Check if exchange has valid authentication credentials configured.
+
+        Returns:
+            True if authentication is configured, False otherwise
         """
         pass
 

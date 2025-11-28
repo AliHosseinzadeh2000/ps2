@@ -1,6 +1,6 @@
 """Financial and mathematical calculation utilities."""
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 
 def calculate_spread_percent(buy_price: float, sell_price: float) -> float:
@@ -150,4 +150,79 @@ def round_to_precision(value: float, precision: int = 8) -> float:
         Rounded value
     """
     return round(value, precision)
+
+
+def calculate_optimal_limit_price(
+    predicted_price: float,
+    current_price: float,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    safety_margin_percent: float = 0.001,
+    is_buy: bool = True,
+) -> float:
+    """
+    Calculate optimal limit order price using AI prediction with safety margins.
+
+    Args:
+        predicted_price: AI-predicted future price
+        current_price: Current market price
+        min_price: Minimum allowed price (for buy orders)
+        max_price: Maximum allowed price (for sell orders)
+        safety_margin_percent: Safety margin percentage (default 0.1%)
+        is_buy: True for buy orders, False for sell orders
+
+    Returns:
+        Optimal limit price
+    """
+    if predicted_price <= 0:
+        return current_price
+
+    # For buy orders: set price slightly below predicted to increase fill probability
+    # For sell orders: set price slightly above predicted to increase fill probability
+    if is_buy:
+        optimal_price = predicted_price * (1 - safety_margin_percent)
+        # Ensure we don't go below minimum profitable price
+        if min_price:
+            optimal_price = max(optimal_price, min_price)
+        # Don't go above current ask (would be immediately filled as taker)
+        optimal_price = min(optimal_price, current_price)
+    else:
+        optimal_price = predicted_price * (1 + safety_margin_percent)
+        # Ensure we don't go above maximum profitable price
+        if max_price:
+            optimal_price = min(optimal_price, max_price)
+        # Don't go below current bid (would be immediately filled as taker)
+        optimal_price = max(optimal_price, current_price)
+
+    return optimal_price
+
+
+def adjust_price_for_arbitrage(
+    predicted_price: float,
+    opportunity_buy_price: float,
+    opportunity_sell_price: float,
+    is_buy: bool,
+    safety_margin_percent: float = 0.001,
+) -> float:
+    """
+    Adjust predicted price to stay within profitable arbitrage bounds.
+
+    Args:
+        predicted_price: AI-predicted price
+        opportunity_buy_price: Buy price from arbitrage opportunity
+        opportunity_sell_price: Sell price from arbitrage opportunity
+        is_buy: True for buy orders, False for sell orders
+        safety_margin_percent: Safety margin to maintain profitability
+
+    Returns:
+        Adjusted price that maintains arbitrage profitability
+    """
+    if is_buy:
+        # For buy: price should be <= opportunity_buy_price to maintain profit
+        max_allowed = opportunity_buy_price * (1 - safety_margin_percent)
+        return min(predicted_price, max_allowed)
+    else:
+        # For sell: price should be >= opportunity_sell_price to maintain profit
+        min_allowed = opportunity_sell_price * (1 + safety_margin_percent)
+        return max(predicted_price, min_allowed)
 
