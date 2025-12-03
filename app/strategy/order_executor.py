@@ -13,6 +13,11 @@ from app.data.collector import DataCollector
 from app.exchanges.base import ExchangeInterface, Order, OrderBook
 from app.monitoring.metrics import PerformanceMonitor
 from app.strategy.arbitrage_engine import ArbitrageOpportunity
+from app.strategy.circuit_breakers import (
+    MarketVolatilityCircuitBreaker,
+    ExchangeConnectivityCircuitBreaker,
+    ErrorRateCircuitBreaker,
+)
 from app.utils.math import adjust_price_for_arbitrage
 
 logger = get_logger(__name__)
@@ -45,6 +50,22 @@ class OrderExecutor:
         # Risk management tracking
         self.daily_profit_loss: float = 0.0
         self.exchange_positions: dict[str, float] = {}  # Exchange -> total position size
+        self._initial_balance: float = 0.0  # For drawdown calculation
+        self._peak_balance: float = 0.0  # Track peak for drawdown
+        self._slippage_history: list[float] = []  # Track slippage for monitoring
+        # Circuit breakers
+        self.volatility_breaker = MarketVolatilityCircuitBreaker(
+            max_volatility_percent=5.0,
+            window_seconds=60,
+        )
+        self.connectivity_breaker = ExchangeConnectivityCircuitBreaker(
+            max_failures=5,
+            window_seconds=60,
+        )
+        self.error_rate_breaker = ErrorRateCircuitBreaker(
+            max_error_rate=0.5,
+            window_seconds=60,
+        )
         # Performance monitoring
         self.monitor = PerformanceMonitor()
 
@@ -95,7 +116,7 @@ class OrderExecutor:
             return None, None
 
         # Risk management checks
-        if not self._check_risk_limits(opportunity, buy_exchange, sell_exchange):
+        if not await self._check_risk_limits(opportunity, buy_exchange, sell_exchange):
             logger.warning(
                 f"Risk limits exceeded for opportunity {opportunity.symbol}, skipping execution"
             )
@@ -393,12 +414,24 @@ class OrderExecutor:
                     f"Order placed: {order.order_id} on {exchange.name} "
                     f"{side} {quantity:.8f} @ {price if price else 'market'}"
                 )
+                
+                # Record success for circuit breakers
+                exchange_name = getattr(exchange, 'name', str(exchange))
+                self.connectivity_breaker.record_success(exchange_name)
+                self.error_rate_breaker.record_request(exchange_name, True)
+                
                 return order
             except Exception as e:
                 last_exception = e
                 logger.warning(
                     f"Order placement attempt {attempt + 1} failed: {e}"
                 )
+                
+                # Record failure for circuit breakers
+                exchange_name = getattr(exchange, 'name', str(exchange))
+                self.connectivity_breaker.record_failure(exchange_name)
+                self.error_rate_breaker.record_request(exchange_name, False)
+                
                 if attempt < self.config.max_retries:
                     await asyncio.sleep(self.config.retry_delay_seconds)
 
@@ -606,11 +639,51 @@ class OrderExecutor:
         Returns:
             True if risk checks pass
         """
+        # Check if trading is manually halted
+        if self.config.trading_halted:
+            logger.warning("Trading is manually halted")
+            return False
+
+        # Check exchange connectivity circuit breakers
+        buy_exchange_name = opportunity.buy_exchange
+        sell_exchange_name = opportunity.sell_exchange
+        
+        if self.connectivity_breaker.is_halted(buy_exchange_name):
+            logger.warning(f"Buy exchange {buy_exchange_name} is halted due to connectivity issues")
+            return False
+        
+        if self.connectivity_breaker.is_halted(sell_exchange_name):
+            logger.warning(f"Sell exchange {sell_exchange_name} is halted due to connectivity issues")
+            return False
+
+        # Check error rate circuit breakers
+        if self.error_rate_breaker.is_halted(buy_exchange_name):
+            logger.warning(f"Buy exchange {buy_exchange_name} is halted due to high error rate")
+            return False
+        
+        if self.error_rate_breaker.is_halted(sell_exchange_name):
+            logger.warning(f"Sell exchange {sell_exchange_name} is halted due to high error rate")
+            return False
+
+        # Check market volatility circuit breaker
+        if not self.volatility_breaker.check_volatility(opportunity.symbol, opportunity.buy_price):
+            logger.warning(f"Trading halted for {opportunity.symbol} due to high volatility")
+            return False
+
         # Check daily loss limit
         if self.daily_profit_loss < -self.config.daily_loss_limit:
             logger.warning(
                 f"Daily loss limit exceeded: {self.daily_profit_loss:.2f} < "
                 f"-{self.config.daily_loss_limit:.2f}"
+            )
+            return False
+
+        # Check per-trade loss limit (estimate worst case)
+        estimated_max_loss = opportunity.buy_price * opportunity.max_quantity * 0.01  # 1% worst case
+        if estimated_max_loss > self.config.per_trade_loss_limit:
+            logger.warning(
+                f"Per-trade loss limit exceeded: {estimated_max_loss:.2f} > "
+                f"{self.config.per_trade_loss_limit:.2f}"
             )
             return False
 
@@ -633,7 +706,27 @@ class OrderExecutor:
             )
             return False
 
-        # Check balance if required
+        # Check total portfolio position limit
+        total_position = sum(self.exchange_positions.values()) + position_value
+        if total_position > self.config.max_total_position:
+            logger.warning(
+                f"Total portfolio position limit exceeded: {total_position:.2f} > "
+                f"{self.config.max_total_position:.2f}"
+            )
+            return False
+
+        # Check drawdown protection
+        if hasattr(self, '_initial_balance') and self._initial_balance > 0:
+            current_balance = self._initial_balance + self.daily_profit_loss
+            drawdown_percent = ((self._initial_balance - current_balance) / self._initial_balance) * 100
+            if drawdown_percent > self.config.max_drawdown_percent:
+                logger.warning(
+                    f"Max drawdown exceeded: {drawdown_percent:.2f}% > "
+                    f"{self.config.max_drawdown_percent:.2f}%"
+                )
+                return False
+
+        # Pre-trade balance verification
         if self.config.require_balance_check:
             try:
                 buy_balance = await buy_exchange.get_balance()
@@ -697,6 +790,11 @@ class OrderExecutor:
 
         # Update daily P&L with actual profit
         self.daily_profit_loss += actual_profit
+        
+        # Update peak balance for drawdown calculation
+        current_balance = self._initial_balance + self.daily_profit_loss
+        if current_balance > self._peak_balance:
+            self._peak_balance = current_balance
 
         # If only one order filled, estimate loss
         if (buy_order and buy_order.status == "filled" and 
@@ -706,9 +804,63 @@ class OrderExecutor:
               (not buy_order or buy_order.status != "filled")):
             self.daily_profit_loss -= position_value * 0.01  # Assume 1% loss
 
+    def initialize_balance_tracking(self, initial_balance: float) -> None:
+        """
+        Initialize balance tracking for drawdown calculation.
+        
+        Args:
+            initial_balance: Initial balance in USDT
+        """
+        self._initial_balance = initial_balance
+        self._peak_balance = initial_balance
+        logger.info(f"Initialized balance tracking: {initial_balance:.2f} USDT")
+
     def reset_daily_tracking(self) -> None:
         """Reset daily profit/loss and position tracking."""
         self.daily_profit_loss = 0.0
         self.exchange_positions.clear()
+        self._slippage_history.clear()
+        if hasattr(self, '_initial_balance'):
+            self._peak_balance = self._initial_balance + self.daily_profit_loss
         logger.info("Reset daily risk tracking")
+
+    def get_risk_metrics(self) -> dict:
+        """
+        Get current risk management metrics.
+        
+        Returns:
+            Dictionary with risk metrics
+        """
+        total_position = sum(self.exchange_positions.values())
+        drawdown_percent = 0.0
+        if hasattr(self, '_initial_balance') and self._initial_balance > 0:
+            current_balance = self._initial_balance + self.daily_profit_loss
+            drawdown_percent = ((self._peak_balance - current_balance) / self._peak_balance) * 100 if self._peak_balance > 0 else 0.0
+        
+        avg_slippage = 0.0
+        max_slippage = 0.0
+        if self._slippage_history:
+            avg_slippage = sum(self._slippage_history) / len(self._slippage_history)
+            max_slippage = max(self._slippage_history)
+        
+        # Get circuit breaker states
+        halted_exchanges = []
+        for exchange_name in self.exchanges.keys():
+            exchange_str = exchange_name.value if isinstance(exchange_name, ExchangeName) else str(exchange_name)
+            if self.connectivity_breaker.is_halted(exchange_str):
+                halted_exchanges.append(f"{exchange_str}(connectivity)")
+            if self.error_rate_breaker.is_halted(exchange_str):
+                halted_exchanges.append(f"{exchange_str}(error_rate)")
+        
+        return {
+            "daily_profit_loss": self.daily_profit_loss,
+            "total_position": total_position,
+            "exchange_positions": dict(self.exchange_positions),
+            "drawdown_percent": drawdown_percent,
+            "avg_slippage_percent": avg_slippage,
+            "max_slippage_percent": max_slippage,
+            "trading_halted": self.config.trading_halted,
+            "volatility_halted": self.volatility_breaker.is_halted(),
+            "halted_exchanges": halted_exchanges,
+        }
 

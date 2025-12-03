@@ -5,8 +5,10 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 from app.core.config import TradingConfig
+from app.core.exchange_types import ExchangeName
 from app.core.logging import get_logger
 from app.exchanges.base import ExchangeInterface, OrderBook
+from app.utils.symbol_converter import ExchangeSymbolMapper, SymbolConverter
 
 logger = get_logger(__name__)
 
@@ -95,24 +97,58 @@ class PriceStream:
         Args:
             exchange_name: Name of the exchange
             exchange: Exchange interface instance
-            symbol: Trading pair symbol
+            symbol: Trading pair symbol (standard format)
         """
+        # Convert symbol to exchange-specific format
+        try:
+            exchange_enum = ExchangeName.from_string(exchange_name)
+            exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(symbol, exchange_enum)
+            if not exchange_symbol:
+                # Only try IRT/IRR conversion (same currency), NOT IRT/USDT (different markets)
+                base_currency = SymbolConverter.get_base_currency(symbol)
+                quote_currency = SymbolConverter.get_quote_currency(symbol)
+                if base_currency and quote_currency:
+                    supported_quotes = SymbolConverter.EXCHANGE_QUOTE_CURRENCIES.get(exchange_enum, [])
+                    # Only allow IRT/IRR conversion
+                    if quote_currency == "IRT" and "IRR" in supported_quotes:
+                        alt_symbol = f"{base_currency}IRR"
+                        exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(alt_symbol, exchange_enum)
+                    elif quote_currency == "IRR" and "IRT" in supported_quotes:
+                        alt_symbol = f"{base_currency}IRT"
+                        exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(alt_symbol, exchange_enum)
+                
+                if not exchange_symbol:
+                    logger.warning(
+                        f"No compatible symbol found for {exchange_name} with {symbol}. "
+                        f"Exchange supports: {supported_quotes}. Skipping this exchange-symbol pair."
+                    )
+                    return
+        except Exception as e:
+            logger.warning(f"Could not convert symbol {symbol} for {exchange_name}: {e}. Using as-is.")
+            exchange_symbol = symbol
+        
         while self._running:
             try:
-                orderbook = await exchange.fetch_orderbook(symbol, depth=20)
-                self.orderbooks[symbol][exchange_name] = orderbook
+                orderbook = await exchange.fetch_orderbook(exchange_symbol, depth=20)
+                # Store with normalized symbol as key
+                normalized_symbol = SymbolConverter.normalize_symbol(symbol)
+                self.orderbooks[normalized_symbol][exchange_name] = orderbook
 
-                # Notify subscribers
+                # Notify subscribers with normalized symbol
                 for callback in self.subscribers:
                     try:
-                        callback(symbol, self.orderbooks[symbol])
+                        callback(normalized_symbol, self.orderbooks[normalized_symbol])
                     except Exception as e:
                         logger.error(f"Error in subscriber callback: {e}")
 
             except Exception as e:
+                error_msg = str(e)
+                # Truncate very long error messages
+                if len(error_msg) > 200:
+                    error_msg = error_msg[:200] + "..."
                 logger.error(
                     f"Error fetching orderbook from {exchange_name} "
-                    f"for {symbol}: {str(e)}",
+                    f"for {exchange_symbol} (requested: {symbol}): {error_msg}",
                     exc_info=True
                 )
 

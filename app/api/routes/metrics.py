@@ -106,18 +106,54 @@ async def get_opportunities(
         
         symbol_str = symbol.value
         
-        # Try to fetch real orderbooks
+        # Try to fetch real orderbooks with proper symbol conversion
         orderbooks = {}
         failed_exchanges = []
+        base_currency = SymbolConverter.get_base_currency(symbol_str)
+        quote_currency = SymbolConverter.get_quote_currency(symbol_str)
+        
         for name, exchange in exchanges.items():
             try:
-                orderbook = await exchange.fetch_orderbook(symbol_str)
+                # Get compatible symbol for this exchange
+                exchange_enum = name if isinstance(name, ExchangeName) else ExchangeName.from_string(str(name))
+                supported_quotes = SymbolConverter.EXCHANGE_QUOTE_CURRENCIES.get(exchange_enum, [])
+                
+                # Only use exact quote currency match OR IRT/IRR conversion
+                # Do NOT convert IRT to USDT (different markets!)
+                exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(symbol_str, exchange_enum)
+                
+                if not exchange_symbol and base_currency and quote_currency:
+                    # Only allow IRT/IRR conversion (same currency)
+                    if quote_currency == "IRT" and "IRR" in supported_quotes:
+                        alt_symbol = f"{base_currency}IRR"
+                        exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(alt_symbol, exchange_enum)
+                    elif quote_currency == "IRR" and "IRT" in supported_quotes:
+                        alt_symbol = f"{base_currency}IRT"
+                        exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(alt_symbol, exchange_enum)
+                
+                if not exchange_symbol:
+                    logger.warning(
+                        f"No compatible symbol for {exchange_enum.value} with {symbol_str}. "
+                        f"Exchange supports: {supported_quotes}"
+                    )
+                    failed_exchanges.append(exchange_enum.value)
+                    continue
+                
+                if not exchange_symbol:
+                    logger.warning(f"Could not determine symbol for {exchange_enum.value}")
+                    failed_exchanges.append(exchange_enum.value)
+                    continue
+                
+                orderbook = await exchange.fetch_orderbook(exchange_symbol)
                 # Store with enum value as key for consistency
-                orderbooks[name.value if hasattr(name, 'value') else str(name)] = orderbook
-                logger.debug(f"Successfully fetched orderbook from {name.value if hasattr(name, 'value') else name} for {symbol_str}")
+                orderbooks[exchange_enum.value] = orderbook
+                logger.debug(f"Successfully fetched orderbook from {exchange_enum.value} for {exchange_symbol} (requested: {symbol_str})")
             except Exception as e:
-                exchange_name_str = name.value if hasattr(name, 'value') else str(name)
-                logger.error(f"Failed to fetch orderbook from {exchange_name_str} for {symbol_str}: {e}", exc_info=True)
+                exchange_name_str = exchange_enum.value if 'exchange_enum' in locals() else (name.value if hasattr(name, 'value') else str(name))
+                error_msg = str(e)
+                if len(error_msg) > 150:
+                    error_msg = error_msg[:150] + "..."
+                logger.error(f"Failed to fetch orderbook from {exchange_name_str} for {symbol_str}: {error_msg}", exc_info=True)
                 failed_exchanges.append(exchange_name_str)
         
         if len(orderbooks) < 2:

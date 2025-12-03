@@ -22,10 +22,39 @@ from app.exchanges.base import (
     OrderBook,
     OrderBookEntry,
 )
+from app.exchanges.exceptions import (
+    ExchangeAPIError,
+    ExchangeAuthenticationError,
+    ExchangeNetworkError,
+    ExchangeOrderError,
+    ExchangeOrderNotFoundError,
+)
 from typing import List
 from app.core.logging import get_logger
+from app.utils.retry import retry_with_backoff, RetryConfig
+from app.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 
 logger = get_logger(__name__)
+
+# Circuit breaker for Invex API
+_invex_circuit_breaker = CircuitBreaker(
+    "invex",
+    CircuitBreakerConfig(
+        failure_threshold=5,
+        success_threshold=2,
+        timeout=60.0,
+        expected_exception=Exception,
+    ),
+)
+
+# Retry configuration for Invex
+_invex_retry_config = RetryConfig(
+    max_retries=3,
+    initial_delay=1.0,
+    max_delay=10.0,
+    exponential_base=2.0,
+    retryable_exceptions=(httpx.HTTPError, httpx.RequestError, httpx.TimeoutException),
+)
 
 
 class InvexExchange(ExchangeInterface):
@@ -128,7 +157,10 @@ class InvexExchange(ExchangeInterface):
             return signature.hex()
         except Exception as e:
             logger.error(f"Invex: Signature generation error: {e}")
-            raise Exception(f"Failed to generate signature: {e}") from e
+            raise ExchangeAuthenticationError(
+                f"Failed to generate signature: {e}",
+                exchange_name="Invex",
+            ) from e
 
     def _get_headers(
         self, method: str, path: str, signed: bool = False, body_data: Optional[Dict] = None
@@ -168,6 +200,7 @@ class InvexExchange(ExchangeInterface):
         
         return headers
 
+    @retry_with_backoff(config=_invex_retry_config)
     async def fetch_orderbook(
         self, symbol: str, depth: int = 20
     ) -> OrderBook:
@@ -189,23 +222,28 @@ class InvexExchange(ExchangeInterface):
         # Convert symbol format
         invex_symbol = self._convert_symbol_format(symbol)
         
-        # Clamp depth to common values (5, 10, 20, 50, 100)
-        valid_depths = [5, 10, 20, 50, 100]
+        # Invex only accepts specific depth values: 5, 20, or 50
+        valid_depths = [5, 20, 50]
+        # Find closest valid depth
         closest_depth = min(valid_depths, key=lambda x: abs(x - depth))
+        # If requested depth is between values, use the next higher one
         if closest_depth < depth:
-            # Use next higher value if requested depth is between values
             idx = valid_depths.index(closest_depth)
             if idx < len(valid_depths) - 1:
                 closest_depth = valid_depths[idx + 1]
+            else:
+                closest_depth = valid_depths[-1]  # Use max if depth is larger than all
+        # Ensure we use a string for the API (Invex expects string values)
+        closest_depth_str = str(closest_depth)
         
         params = {
             "symbol": invex_symbol,
-            "depth": closest_depth,
+            "depth": closest_depth_str,
         }
         
         try:
             # This is a public endpoint, no authentication required
-            logger.debug(f"Invex: Fetching orderbook for symbol={symbol} (converted to {invex_symbol}), depth={closest_depth}")
+            logger.debug(f"Invex: Fetching orderbook for symbol={symbol} (converted to {invex_symbol}), depth={closest_depth_str} (requested: {depth})")
             response = await client.get(
                 endpoint,
                 params=params,
@@ -260,7 +298,11 @@ class InvexExchange(ExchangeInterface):
 
             if not bids or not asks:
                 logger.warning(f"Invex: Empty orderbook for {symbol} (converted: {invex_symbol}). Response: {data}")
-                raise Exception(f"Invex returned empty orderbook for symbol {symbol} (converted: {invex_symbol}). This symbol may not be available on Invex.")
+                raise ExchangeAPIError(
+                    f"Invex returned empty orderbook for symbol {symbol} (converted: {invex_symbol}). This symbol may not be available on Invex.",
+                    exchange_name="Invex",
+                    response_data=data,
+                )
             
             logger.debug(f"Invex: Parsed {len(bids)} bids and {len(asks)} asks for {symbol}")
             return OrderBook(
@@ -270,20 +312,42 @@ class InvexExchange(ExchangeInterface):
                 symbol=symbol,
             )
         except httpx.HTTPStatusError as e:
-            error_detail = f"HTTP {e.response.status_code}"
-            try:
-                error_body = e.response.json()
-                error_detail += f": {error_body}"
-            except:
-                error_detail += f": {e.response.text[:200]}"
+            status_code = e.response.status_code
+            error_detail = f"HTTP {status_code}"
+            
+            # Handle specific error codes
+            if status_code == 504:
+                error_detail = "Gateway Timeout - Exchange server is slow or unavailable"
+                logger.warning(f"Invex: Gateway timeout for {symbol} (converted: {invex_symbol})")
+            elif status_code == 503:
+                error_detail = "Service Unavailable - Exchange is temporarily down"
+                logger.warning(f"Invex: Service unavailable for {symbol} (converted: {invex_symbol})")
+            else:
+                try:
+                    error_body = e.response.json()
+                    error_detail += f": {error_body}"
+                except:
+                    error_detail += f": {e.response.text[:200]}"
+            
             logger.error(f"Invex: Failed to fetch orderbook for {symbol} (converted: {invex_symbol}): {error_detail}")
-            raise Exception(f"Failed to fetch orderbook from Invex for {symbol}: {error_detail}") from e
+            raise ExchangeAPIError(
+                f"Failed to fetch orderbook from Invex for {symbol}: {error_detail}",
+                exchange_name="Invex",
+                status_code=status_code,
+                response_data=error_detail,
+            ) from e
         except httpx.HTTPError as e:
             logger.error(f"Invex: Network error fetching orderbook for {symbol} (converted: {invex_symbol}): {e}")
-            raise Exception(f"Failed to fetch orderbook from Invex for {symbol}: Network error - {e}") from e
+            raise ExchangeNetworkError(
+                f"Failed to fetch orderbook from Invex for {symbol}: Network error - {e}",
+                exchange_name="Invex",
+            ) from e
         except Exception as e:
             logger.error(f"Invex: Unexpected error fetching orderbook for {symbol} (converted: {invex_symbol}): {e}", exc_info=True)
-            raise Exception(f"Failed to fetch orderbook from Invex for {symbol}: {e}") from e
+            raise ExchangeAPIError(
+                f"Failed to fetch orderbook from Invex for {symbol}: {e}",
+                exchange_name="Invex",
+            ) from e
 
     async def place_order(
         self,
@@ -364,7 +428,11 @@ class InvexExchange(ExchangeInterface):
                 order_id = data.get("orderId") or data.get("id") or data.get("order_id")
             
             if not order_id:
-                raise Exception(f"Invex: Invalid order response: {data}")
+                raise ExchangeOrderError(
+                    f"Invex: Invalid order response: {data}",
+                    exchange_name="Invex",
+                    response_data=data,
+                )
 
             return Order(
                 order_id=str(order_id),
@@ -377,7 +445,10 @@ class InvexExchange(ExchangeInterface):
                 timestamp=time.time(),
             )
         except httpx.HTTPError as e:
-            raise Exception(f"Failed to place order on Invex: {e}") from e
+            raise ExchangeOrderError(
+                f"Failed to place order on Invex: {e}",
+                exchange_name="Invex",
+            ) from e
 
     async def cancel_order(self, order_id: str, symbol: str) -> bool:
         """
@@ -460,7 +531,10 @@ class InvexExchange(ExchangeInterface):
 
             return balances
         except httpx.HTTPError as e:
-            raise Exception(f"Failed to fetch balance from Invex: {e}") from e
+            raise ExchangeAPIError(
+                f"Failed to fetch balance from Invex: {e}",
+                exchange_name="Invex",
+            ) from e
 
     async def get_open_orders(
         self, symbol: Optional[str] = None
@@ -540,7 +614,10 @@ class InvexExchange(ExchangeInterface):
 
             return orders
         except httpx.HTTPError as e:
-            raise Exception(f"Failed to fetch open orders from Invex: {e}") from e
+            raise ExchangeAPIError(
+                f"Failed to fetch open orders from Invex: {e}",
+                exchange_name="Invex",
+            ) from e
 
     async def get_order(self, order_id: str, symbol: str) -> Order:
         """

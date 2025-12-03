@@ -44,8 +44,8 @@ class NobitexConfig(ExchangeConfig):
     api_key: str = Field(default="", env="NOBITEX_API_KEY")  # Legacy/experimental API key
     api_secret: str = Field(default="", env="NOBITEX_API_SECRET")  # Legacy/experimental API secret
     base_url: str = Field(default="https://apiv2.nobitex.ir", env="NOBITEX_BASE_URL")
-    maker_fee: float = Field(default=0.0005)
-    taker_fee: float = Field(default=0.001)
+    maker_fee: float = Field(default=0.002)  # 0.2% for Toman market (Level 1)
+    taker_fee: float = Field(default=0.0025)  # 0.25% for Toman market (Level 1)
 
     class Config:
         """Pydantic config."""
@@ -60,8 +60,8 @@ class WallexConfig(ExchangeConfig):
     api_key: str = Field(default="", env="WALLEX_API_KEY")
     api_secret: str = Field(default="", env="WALLEX_API_SECRET")
     base_url: str = Field(default="https://api.wallex.ir", env="WALLEX_BASE_URL")
-    maker_fee: float = Field(default=0.0005)
-    taker_fee: float = Field(default=0.001)
+    maker_fee: float = Field(default=0.0025)  # 0.25% for Toman market (Level 1)
+    taker_fee: float = Field(default=0.003)  # 0.3% for Toman market (Level 1)
 
     class Config:
         """Pydantic config."""
@@ -93,8 +93,9 @@ class InvexConfig(ExchangeConfig):
     api_key: str = Field(default="", env="INVEX_API_KEY")
     api_secret: str = Field(default="", env="INVEX_API_SECRET")
     base_url: str = Field(default="https://api.invex.ir/trading/v1", env="INVEX_BASE_URL")
-    maker_fee: float = Field(default=0.0005)
-    taker_fee: float = Field(default=0.001)
+    maker_fee: float = Field(default=0.0025)  # 0.25% for Toman market
+    taker_fee: float = Field(default=0.0025)  # 0.25% for Toman market
+    # Note: Tether market fees are Maker 0.1%, Taker 0.13% (can be configured per market)
 
     class Config:
         """Pydantic config."""
@@ -134,9 +135,13 @@ class TradingConfig(BaseSettings):
     retry_delay_seconds: float = Field(default=1.0, ge=0.0)
     # Risk management
     max_position_per_exchange: float = Field(default=5000.0, ge=0.0)
+    max_total_position: float = Field(default=10000.0, ge=0.0)  # Total portfolio position limit
     daily_loss_limit: float = Field(default=100.0, ge=0.0)
+    per_trade_loss_limit: float = Field(default=50.0, ge=0.0)  # Max loss per trade
+    max_drawdown_percent: float = Field(default=5.0, ge=0.0, le=100.0)  # Max drawdown percentage
     max_slippage_percent: float = Field(default=0.5, ge=0.0, le=10.0)
     require_balance_check: bool = Field(default=True)
+    trading_halted: bool = Field(default=False)  # Manual trading halt flag
 
     class Config:
         """Pydantic config."""

@@ -1,16 +1,18 @@
-# AI-Assisted Cryptocurrency Arbitrage Trading Bot
+# Cryptocurrency Arbitrage Trading Bot
 
-A lightweight, production-oriented arbitrage trading bot that detects and executes arbitrage opportunities between cryptocurrency exchanges using AI-assisted maker/taker order decisions.
+A lightweight, production-oriented arbitrage trading bot that detects and executes arbitrage opportunities between cryptocurrency exchanges. **AI-powered maker/taker optimization is an optional enhancement** - the bot works fully without AI, using taker orders by default.
 
 ## Features
 
 - **Arbitrage Detection**: Real-time detection of price differences between exchanges
-- **AI-Powered Decisions**: XGBoost model for optimizing maker vs taker order selection
+- **AI-Enhanced Decisions** (Optional): XGBoost model for optimizing maker vs taker order selection when enabled
+- **Works Without AI**: Fully functional arbitrage bot that operates without AI (uses taker orders by default)
 - **Async Architecture**: Fully asynchronous Python implementation for high performance
 - **Multiple Exchanges**: Support for Nobitex, Wallex, KuCoin, Invex, and Tabdeal exchanges (extensible)
 - **Backtesting**: Historical data replay for strategy validation
 - **REST API**: FastAPI-based monitoring and control interface
-- **Fee Optimization**: Minimizes trading fees through intelligent order type selection
+- **Fee Optimization**: AI can minimize trading fees through intelligent order type selection (optional)
+- **Risk Management**: Built-in risk controls to prevent capital loss
 
 ## Project Structure
 
@@ -298,12 +300,14 @@ The `OrderExecutor` handles:
 - Maker/taker order selection
 - Error handling and order cancellation
 
-### AI Model
+### AI Model (Optional Enhancement)
 
-The XGBoost model predicts whether to use maker (post-only) or taker orders based on:
+When enabled, the XGBoost model predicts whether to use maker (post-only) or taker orders based on:
 - Orderbook features (spread, depth, imbalance)
 - OHLC features (price movements, volume, volatility)
 - Historical patterns
+
+**Note**: The bot works fully without AI. When AI is not available or not enabled, the bot defaults to taker orders, which still allows profitable arbitrage trading.
 
 ## Testing
 

@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import ai, health, metrics, orders
+from app.api.routes import ai, health, metrics, orders, risk
 from app.api.services import (
     close_exchanges,
     get_arbitrage_engine,
@@ -38,6 +38,7 @@ app.include_router(health.router)
 app.include_router(metrics.router)
 app.include_router(orders.router)
 app.include_router(ai.router)
+app.include_router(risk.router)
 
 
 @app.on_event("startup")

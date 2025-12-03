@@ -7,6 +7,8 @@ from app.core.exchange_types import ExchangeName
 
 from app.ai.features import combine_features, extract_orderbook_features
 from app.core.config import TradingConfig
+from app.core.exchange_types import ExchangeName
+from app.core.logging import get_logger
 from app.data.collector import DataCollector
 from app.exchanges.base import ExchangeInterface, OrderBook
 from app.utils.math import (
@@ -14,6 +16,9 @@ from app.utils.math import (
     calculate_spread_percent,
     calculate_required_quantity,
 )
+from app.utils.symbol_converter import SymbolConverter
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -203,6 +208,14 @@ class ArbitrageEngine:
         opportunities = []
         exchange_names = list(orderbooks.keys())
 
+        # Extract base and quote currency from input symbol
+        base_currency = SymbolConverter.get_base_currency(symbol)
+        quote_currency = SymbolConverter.get_quote_currency(symbol)
+        
+        if not base_currency or not quote_currency:
+            logger.warning(f"Could not parse symbol {symbol} for opportunity detection")
+            return opportunities
+
         # Check all pairs of exchanges
         for i, buy_exchange_name in enumerate(exchange_names):
             for sell_exchange_name in exchange_names[i + 1 :]:
@@ -216,9 +229,38 @@ class ArbitrageEngine:
                 if not buy_orderbook or not sell_orderbook:
                     continue
 
+                # Verify symbols are compatible for arbitrage
+                # Both orderbooks should have the same base currency
+                # Quote currency should match (for direct arbitrage)
+                buy_symbol_base = SymbolConverter.get_base_currency(buy_orderbook.symbol)
+                sell_symbol_base = SymbolConverter.get_base_currency(sell_orderbook.symbol)
+                
+                if buy_symbol_base != sell_symbol_base:
+                    # Different base currencies - can't arbitrage
+                    logger.debug(
+                        f"Skipping {buy_key}->{sell_key}: "
+                        f"Different base currencies ({buy_symbol_base} vs {sell_symbol_base})"
+                    )
+                    continue
+                
+                buy_symbol_quote = SymbolConverter.get_quote_currency(buy_orderbook.symbol)
+                sell_symbol_quote = SymbolConverter.get_quote_currency(sell_orderbook.symbol)
+                
+                # Check if quote currencies are compatible (only IRT/IRR are compatible)
+                if not SymbolConverter.are_quote_currencies_compatible(buy_symbol_quote, sell_symbol_quote):
+                    # Different quote currencies - skip (IRT != USDT, they are different markets)
+                    logger.debug(
+                        f"Skipping {buy_key}->{sell_key}: "
+                        f"Incompatible quote currencies ({buy_symbol_quote} vs {sell_symbol_quote})"
+                    )
+                    continue
+
+                # Use normalized symbol for opportunity
+                opp_symbol = SymbolConverter.normalize_symbol(buy_orderbook.symbol)
+
                 # Try buy on first exchange, sell on second
                 opp1 = self.detect_opportunity(
-                    symbol,
+                    opp_symbol,
                     buy_exchange_name,
                     sell_exchange_name,
                     buy_orderbook,
@@ -229,7 +271,7 @@ class ArbitrageEngine:
 
                 # Try buy on second exchange, sell on first
                 opp2 = self.detect_opportunity(
-                    symbol,
+                    opp_symbol,
                     sell_exchange_name,
                     buy_exchange_name,
                     sell_orderbook,
