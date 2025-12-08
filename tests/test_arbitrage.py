@@ -19,6 +19,16 @@ class MockExchange:
 
     def get_taker_fee(self) -> float:
         return self._taker_fee
+    
+    async def fetch_orderbook(self, symbol: str, depth: int = 20):
+        """Mock fetch_orderbook - returns empty orderbook."""
+        from app.exchanges.base import OrderBook
+        return OrderBook(
+            bids=[],
+            asks=[],
+            timestamp=1000.0,
+            symbol=symbol,
+        )
 
 
 @pytest.fixture

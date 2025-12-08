@@ -54,8 +54,10 @@ def test_get_feature_names():
 def test_model_initialization():
     """Test model initialization."""
     model = TradingModel()
-    assert not model.is_loaded()
-    assert model.model is None
+    assert not model.is_classifier_loaded()
+    assert not model.is_regressor_loaded()
+    assert model.classifier is None
+    assert model.regressor is None
 
 
 def test_model_predict_no_model():

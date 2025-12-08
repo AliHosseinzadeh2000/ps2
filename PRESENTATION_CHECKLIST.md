@@ -10,7 +10,7 @@ Run these tests to verify everything works:
 
 ```bash
 # 1. Test with real API data (no credentials needed)
-python test_bot_demo.py --skip-auth
+python test_bot.py --mode realistic --symbol USDTIRT --min-spread 0.01
 
 # 2. Run all integration tests
 pytest tests/test_arbitrage_integration.py -v
@@ -55,7 +55,7 @@ pytest tests/test_real_api_integration.py -v -s
 
 **Step 1: Show Orderbook Fetching**
 ```bash
-python test_bot_demo.py --skip-auth --symbol BTCUSDT
+python test_bot.py --mode realistic --symbol USDTIRT --min-spread 0.01
 ```
 - Show real-time data from exchanges
 - Explain bid/ask prices
@@ -164,7 +164,7 @@ A: We use test orders placed well below market price (won't fill), and comprehen
 
 ## Final Checklist
 
-- [ ] Run `python test_bot_demo.py --skip-auth` successfully
+- [ ] Run `python test_bot.py --mode realistic --symbol USDTIRT` successfully
 - [ ] Verify at least 2 exchanges work
 - [ ] Test opportunity detection
 - [ ] Test price stream

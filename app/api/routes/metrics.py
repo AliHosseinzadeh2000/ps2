@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from app.api.services import get_arbitrage_engine, get_exchanges, get_order_executor
 from app.core.exchange_types import ExchangeName, TradingSymbol
 from app.core.logging import get_logger
+from app.utils.symbol_converter import ExchangeSymbolMapper, SymbolConverter
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 logger = get_logger(__name__)

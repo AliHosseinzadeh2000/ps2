@@ -17,11 +17,11 @@ pytest tests/test_performance.py -v -s
 ### 2. Test with Real API Data (Public endpoints only)
 
 ```bash
-# Run the demonstration script (no authentication needed)
-python test_bot_demo.py --skip-auth
+# Run the unified test script (no authentication needed for realistic mode)
+python test_bot.py --mode realistic --symbol USDTIRT --min-spread 0.01
 
 # Or test specific functionality
-python test_bot_demo.py --skip-auth --symbol BTCUSDT --stream-duration 10
+python test_bot.py --mode realistic --symbol BTCUSDT --min-spread 0.01
 ```
 
 ### 3. Test with Real API Data (Full functionality - requires credentials)
@@ -47,8 +47,11 @@ WALLEX_API_SECRET=your_api_secret
 Then run:
 
 ```bash
-# Full demonstration (includes order placement, cancellation, etc.)
-python test_bot_demo.py
+# Full demonstration with order execution (requires --execute flag)
+python test_bot.py --mode realistic --symbol USDTIRT --min-spread 0.01 --execute
+
+# Or test order lifecycle specifically
+python test_bot.py --mode realistic --symbol USDTIRT --test-order-lifecycle
 
 # Run real API integration tests
 pytest tests/test_real_api_integration.py -v -s
@@ -81,12 +84,13 @@ SKIP_REAL_API_TESTS=1 pytest tests/test_real_api_integration.py
   - Public endpoints: No credentials needed
   - Authenticated endpoints: Valid credentials in `.env`
 
-### 5. Demonstration Script
-- **Location**: `test_bot_demo.py`
-- **Purpose**: Comprehensive demonstration of bot functionality
+### 5. Unified Test Script
+- **Location**: `test_bot.py`
+- **Purpose**: Comprehensive demonstration of bot functionality with multiple modes
+- **Modes**: `realistic`, `paper`, `dry_run`, `integration`
 - **Requirements**: 
-  - Public endpoints: No credentials needed
-  - Full functionality: Valid credentials in `.env`
+  - Public endpoints: No credentials needed for `realistic` mode
+  - Full functionality: Valid credentials in `.env` for order execution (`--execute` flag)
 
 ## What Gets Tested
 
@@ -133,7 +137,7 @@ For your jury presentation, we recommend:
 
 ```bash
 # This demonstrates the bot works with real market data
-python test_bot_demo.py --skip-auth --symbol BTCUSDT
+python test_bot.py --mode realistic --symbol USDTIRT --min-spread 0.01
 ```
 
 This will show:
@@ -146,7 +150,7 @@ This will show:
 
 ```bash
 # This shows complete functionality including order management
-python test_bot_demo.py --symbol BTCUSDT
+python test_bot.py --mode realistic --symbol USDTIRT --min-spread 0.01 --execute
 ```
 
 This will additionally show:

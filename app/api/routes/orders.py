@@ -1,7 +1,7 @@
 """Order management endpoints."""
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator, validator
 from typing import Optional, List
 
 from app.api.services import get_arbitrage_engine, get_order_executor, get_exchanges
@@ -20,6 +20,20 @@ class OrderPreviewRequest(BaseModel):
     buy_exchange: ExchangeName
     sell_exchange: ExchangeName
     quantity: float
+
+    @validator("quantity")
+    def quantity_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("quantity must be greater than zero")
+        return v
+
+    @root_validator
+    def exchanges_must_differ(cls, values):
+        buy = values.get("buy_exchange")
+        sell = values.get("sell_exchange")
+        if buy and sell and buy == sell:
+            raise ValueError("buy_exchange and sell_exchange must be different")
+        return values
 
 
 class OrderPreviewResponse(BaseModel):
@@ -46,6 +60,20 @@ class OrderExecuteRequest(BaseModel):
     sell_exchange: ExchangeName
     quantity: float
     use_maker: bool = False
+
+    @validator("quantity")
+    def quantity_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("quantity must be greater than zero")
+        return v
+
+    @root_validator
+    def exchanges_must_differ(cls, values):
+        buy = values.get("buy_exchange")
+        sell = values.get("sell_exchange")
+        if buy and sell and buy == sell:
+            raise ValueError("buy_exchange and sell_exchange must be different")
+        return values
 
 
 class OrderExecuteResponse(BaseModel):

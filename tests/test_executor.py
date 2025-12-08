@@ -14,15 +14,21 @@ class MockExchange:
     def __init__(self, name: str):
         self.name = name
 
-    async def place_order(self, *args, **kwargs):
+    def get_maker_fee(self) -> float:
+        return 0.0005
+
+    def get_taker_fee(self) -> float:
+        return 0.001
+
+    async def place_order(self, symbol: str, side: str, order_type: str, quantity: float, price: float = None, is_maker: bool = False):
         """Mock place_order."""
         return Order(
-            order_id=f"order_{name}_{args[0]}",
-            symbol=args[0],
-            side=args[1],
-            order_type=args[2],
-            quantity=args[3],
-            price=kwargs.get("price"),
+            order_id=f"order_{self.name}_{symbol}",
+            symbol=symbol,
+            side=side,
+            order_type=order_type,
+            quantity=quantity,
+            price=price,
             status="pending",
             timestamp=1000.0,
         )

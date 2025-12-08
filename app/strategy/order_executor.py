@@ -130,11 +130,19 @@ class OrderExecutor:
 
         if use_maker is None and self.predictor and self.predictor.is_ready():
             try:
+                # Convert symbols to exchange-specific format for orderbook fetching
+                buy_exchange_enum_temp = buy_exchange_key if isinstance(buy_exchange_key, ExchangeName) else ExchangeName.from_string(str(buy_exchange_key))
+                sell_exchange_enum_temp = sell_exchange_key if isinstance(sell_exchange_key, ExchangeName) else ExchangeName.from_string(str(sell_exchange_key))
+                
+                from app.utils.symbol_converter import ExchangeSymbolMapper
+                buy_symbol_for_orderbook = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, buy_exchange_enum_temp) or opportunity.symbol
+                sell_symbol_for_orderbook = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, sell_exchange_enum_temp) or opportunity.symbol
+                
                 # Fetch orderbooks if not provided
                 if buy_orderbook is None:
-                    buy_orderbook = await buy_exchange.fetch_orderbook(opportunity.symbol)
+                    buy_orderbook = await buy_exchange.fetch_orderbook(buy_symbol_for_orderbook)
                 if sell_orderbook is None:
-                    sell_orderbook = await sell_exchange.fetch_orderbook(opportunity.symbol)
+                    sell_orderbook = await sell_exchange.fetch_orderbook(sell_symbol_for_orderbook)
 
                 # Get AI predictions
                 buy_is_maker, buy_prob, buy_pred_price = self.predictor.predict_from_orderbook(
@@ -177,9 +185,24 @@ class OrderExecutor:
                 buy_use_maker = False
                 sell_use_maker = False
 
+        # Convert symbol to exchange-specific format
+        buy_exchange_enum = buy_exchange_key if isinstance(buy_exchange_key, ExchangeName) else ExchangeName.from_string(str(buy_exchange_key))
+        sell_exchange_enum = sell_exchange_key if isinstance(sell_exchange_key, ExchangeName) else ExchangeName.from_string(str(sell_exchange_key))
+        
+        from app.utils.symbol_converter import ExchangeSymbolMapper
+        buy_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, buy_exchange_enum)
+        sell_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, sell_exchange_enum)
+        
+        if not buy_symbol:
+            logger.error(f"Could not convert symbol {opportunity.symbol} for buy exchange {buy_exchange_enum.value}")
+            return None, None
+        if not sell_symbol:
+            logger.error(f"Could not convert symbol {opportunity.symbol} for sell exchange {sell_exchange_enum.value}")
+            return None, None
+        
         logger.info(
             f"Executing arbitrage: {opportunity.symbol} "
-            f"buy@{opportunity.buy_exchange} sell@{opportunity.sell_exchange} "
+            f"buy@{opportunity.buy_exchange} ({buy_symbol}) sell@{opportunity.sell_exchange} ({sell_symbol}) "
             f"qty={opportunity.max_quantity:.8f} profit={opportunity.net_profit:.2f} "
             f"buy_maker={buy_use_maker} sell_maker={sell_use_maker}"
         )
@@ -187,7 +210,7 @@ class OrderExecutor:
         # Execute buy and sell orders concurrently
         buy_task = self._place_order_with_retry(
             buy_exchange,
-            opportunity.symbol,
+            buy_symbol,  # Use exchange-specific symbol
             "buy",
             opportunity.max_quantity,
             buy_price,
@@ -196,7 +219,7 @@ class OrderExecutor:
 
         sell_task = self._place_order_with_retry(
             sell_exchange,
-            opportunity.symbol,
+            sell_symbol,  # Use exchange-specific symbol
             "sell",
             opportunity.max_quantity,
             sell_price,
@@ -221,10 +244,10 @@ class OrderExecutor:
 
         # If one order failed to place, cancel the other
         if buy_order and not sell_order:
-            await self._cancel_order_safe(buy_exchange, buy_order.order_id, opportunity.symbol)
+            await self._cancel_order_safe(buy_exchange, buy_order.order_id, buy_symbol)
             logger.warning("Buy order placed but sell order failed - cancelled buy order")
         elif sell_order and not buy_order:
-            await self._cancel_order_safe(sell_exchange, sell_order.order_id, opportunity.symbol)
+            await self._cancel_order_safe(sell_exchange, sell_order.order_id, sell_symbol)
             logger.warning("Sell order placed but buy order failed - cancelled sell order")
 
         # Verify order execution: poll status until filled or timeout
@@ -232,24 +255,24 @@ class OrderExecutor:
         if buy_order and hasattr(buy_exchange, 'get_order'):
             try:
                 buy_order = await self._verify_order_execution(
-                    buy_exchange, buy_order, opportunity.symbol, "buy"
+                    buy_exchange, buy_order, buy_symbol, "buy"
                 )
             except Exception as e:
                 logger.warning(f"Failed to verify buy order: {e}")
         if sell_order and hasattr(sell_exchange, 'get_order'):
             try:
                 sell_order = await self._verify_order_execution(
-                    sell_exchange, sell_order, opportunity.symbol, "sell"
+                    sell_exchange, sell_order, sell_symbol, "sell"
                 )
             except Exception as e:
                 logger.warning(f"Failed to verify sell order: {e}")
 
         # If one order didn't fill, cancel the other
         if buy_order and buy_order.status == "filled" and sell_order and sell_order.status != "filled":
-            await self._cancel_order_safe(sell_exchange, sell_order.order_id, opportunity.symbol)
+            await self._cancel_order_safe(sell_exchange, sell_order.order_id, sell_symbol)
             logger.warning("Buy order filled but sell order didn't - cancelled sell order")
         elif sell_order and sell_order.status == "filled" and buy_order and buy_order.status != "filled":
-            await self._cancel_order_safe(buy_exchange, buy_order.order_id, opportunity.symbol)
+            await self._cancel_order_safe(buy_exchange, buy_order.order_id, buy_symbol)
             logger.warning("Sell order filled but buy order didn't - cancelled buy order")
 
         # Log trade data for retraining

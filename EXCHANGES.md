@@ -8,7 +8,7 @@ This project now supports **5 cryptocurrency exchanges** for arbitrage trading:
 - **Type:** Iranian Exchange
 - **Base URL:** `https://apiv2.nobitex.ir`
 - **Symbol Format:** `BTCIRT`, `ETHIRT` (Iranian Toman pairs)
-- **Fees:** Maker 0.05%, Taker 0.1%
+- **Fees:** Maker 0.2% (0.002), Taker 0.25% (0.0025)
 - **Authentication:** Token-based (obtained via login or provided directly)
 - **API Documentation:** https://apidocs.nobitex.ir/
 - **Configuration:**
@@ -25,8 +25,8 @@ This project now supports **5 cryptocurrency exchanges** for arbitrage trading:
 ### 2. Wallex (`wallex`)
 - **Type:** Iranian Exchange
 - **Base URL:** `https://api.wallex.ir`
-- **Symbol Format:** `BTCUSDT`, `ETHUSDT` (USDT pairs)
-- **Fees:** Maker 0.05%, Taker 0.1%
+- **Symbol Format:** `BTCUSDT`, `ETHUSDT`, `USDTTMN` (USDT pairs, TMN for Toman market)
+- **Fees:** Maker 0.25% (0.0025), Taker 0.3% (0.003)
 - **Configuration:**
   ```bash
   WALLEX_API_KEY=your_key
@@ -51,7 +51,7 @@ This project now supports **5 cryptocurrency exchanges** for arbitrage trading:
 - **Base URL:** `https://api.invex.ir/trading/v1`
 - **Symbol Format:** `BTC_USDT`, `BTC_IRR`, `ETH_USDT`, `ETH_IRR` (uses underscore separator)
   - **Note:** The system automatically converts formats like `BTCUSDT` → `BTC_USDT` and `BTCIRT` → `BTC_IRR`
-- **Fees:** Maker 0.05%, Taker 0.1%
+- **Fees:** Maker 0.25% (0.0025), Taker 0.25% (0.0025)
 - **Authentication:** RSA-PSS signature with SHA256
 - **API Documentation:** https://documenter.getpostman.com/view/29635700/2sA2r813me
 - **Configuration:**
@@ -65,7 +65,7 @@ This project now supports **5 cryptocurrency exchanges** for arbitrage trading:
 - **Type:** Iranian Exchange
 - **Base URL:** `https://api.tabdeal.org`
 - **Symbol Format:** `BTCIRT`, `ETHIRT` (Iranian Toman pairs, no separator)
-- **Fees:** Maker 0.05%, Taker 0.1%
+- **Fees:** Maker 0.05%, Taker 0.1% (default, may vary by tier)
 - **Authentication:** HMAC-SHA256 signature
 - **API Documentation:** https://docs.tabdeal.org/
 - **Configuration:**
@@ -112,14 +112,17 @@ curl "http://localhost:8000/metrics/opportunities?symbol=BTCUSDT"
 ⚠️ **Important:** Each exchange uses different symbol formats:
 
 - **Nobitex, Tabdeal:** `BTCIRT`, `ETHIRT` (no separator, Iranian Toman pairs)
-- **Wallex:** `BTCUSDT`, `ETHUSDT` (no separator, USDT pairs)
+- **Wallex:** `BTCUSDT`, `ETHUSDT`, `USDTTMN` (no separator, USDT pairs or TMN for Toman market)
 - **KuCoin:** `BTC-USDT`, `ETH-USDT` (hyphenated format)
 - **Invex:** `BTC_USDT`, `BTC_IRR`, `ETH_USDT`, `ETH_IRR` (underscore separator)
 
-The system automatically handles symbol conversion:
+**Symbol Conversion:** The system automatically handles symbol conversion:
 - **KuCoin:** Converts `BTCUSDT` → `BTC-USDT`
 - **Invex:** Converts `BTCUSDT` → `BTC_USDT` and `BTCIRT` → `BTC_IRR`
-- Other exchanges: Use symbols as provided
+- **Wallex:** Converts `BTCIRT` → `BTCTMN` (IRT/IRR/TMN are interchangeable)
+- **Nobitex:** Converts `BTCIRR` → `BTCIRT` (IRT/IRR/TMN are interchangeable)
+
+**Currency Compatibility:** IRT, IRR, and TMN represent the same Iranian currency and are automatically converted between exchanges. USDT is a different market and cannot be arbitraged with Iranian currencies.
 
 When making API calls, you can use any format - the system will convert automatically.
 
