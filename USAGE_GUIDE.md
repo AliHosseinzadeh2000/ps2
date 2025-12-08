@@ -108,6 +108,13 @@ curl -X POST "http://localhost:8000/orders/preview" \
   - Requires CSV file with training data
   - See README for training data format
 
+### 5. History (Database Persistence)
+- **GET** `/history/orders` - List stored orders (filters: `exchange`, `symbol`, `status`, `limit`, `offset`)
+- **GET** `/history/trades` - List stored trades (filters: `exchange`, `symbol`, `limit`, `offset`)
+- Storage: SQLite file (default template: `data/bot_{mode}.db`)
+  - Set `DB_MODE=realistic|paper|dry` to separate data, or override path with `DB_PATH`
+- SQL echo for debugging: set `DB_ECHO=true`
+
 ## Configuration Levels
 
 ### Level 1: No Configuration (Demo Mode)

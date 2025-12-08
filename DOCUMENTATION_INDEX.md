@@ -28,6 +28,7 @@ This guide explains which documentation file to use for different purposes.
 - Testing endpoints via Swagger UI
 - Understanding what works with/without API keys
 - Need examples for specific API calls
+ - Checking history endpoints backed by SQLite
 
 **Contains:**
 - Step-by-step API usage
@@ -151,7 +152,7 @@ This guide explains which documentation file to use for different purposes.
 → Read **README.md** (Installation section)
 
 **...use the API endpoints**
-→ Read **USAGE_GUIDE.md**
+→ Read **USAGE_GUIDE.md** (history endpoints: `/history/orders`, `/history/trades`, DB separation via `DB_MODE`)
 
 **...configure exchange API keys**
 → Read **EXCHANGES.md**

@@ -168,6 +168,20 @@ class AIConfig(BaseSettings):
         case_sensitive = False
 
 
+class DatabaseConfig(BaseSettings):
+    """Database configuration."""
+
+    db_path: str = Field(default="data/bot_{mode}.db", env="DB_PATH")
+    mode: str = Field(default="default", env="DB_MODE")
+    echo_sql: bool = Field(default=False, env="DB_ECHO")
+
+    class Config:
+        """Pydantic config."""
+
+        env_prefix = "DB_"
+        case_sensitive = False
+
+
 class APIConfig(BaseSettings):
     """FastAPI application configuration."""
 
@@ -193,6 +207,7 @@ class Settings(BaseSettings):
     tabdeal: TabdealConfig = Field(default_factory=TabdealConfig)
     trading: TradingConfig = Field(default_factory=TradingConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     api: APIConfig = Field(default_factory=APIConfig)
     log_level: str = Field(default="DEBUG", env="LOG_LEVEL")
     environment: str = Field(default="development", env="ENVIRONMENT")

@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import ai, health, metrics, orders, risk
+from app.api.routes import ai, health, metrics, orders, risk, history
 from app.api.services import (
     close_exchanges,
     get_arbitrage_engine,
@@ -13,6 +13,7 @@ from app.api.services import (
 )
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.db.db import init_db
 
 # Setup logging
 setup_logging()
@@ -39,11 +40,15 @@ app.include_router(metrics.router)
 app.include_router(orders.router)
 app.include_router(ai.router)
 app.include_router(risk.router)
+app.include_router(history.router)
 
 
 @app.on_event("startup")
 async def startup_event() -> None:
     """Startup event handler."""
+    # Initialize database
+    await init_db()
+
     # Initialize exchanges, arbitrage engine, and order executor
     get_exchanges()
     arbitrage_engine = get_arbitrage_engine()

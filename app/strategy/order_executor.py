@@ -10,6 +10,8 @@ from app.ai.predictor import TradingPredictor
 from app.core.config import TradingConfig
 from app.core.logging import get_logger
 from app.data.collector import DataCollector
+from app.db.db import get_session_factory
+from app.db.repository import add_trade, upsert_order
 from app.exchanges.base import ExchangeInterface, Order, OrderBook
 from app.monitoring.metrics import PerformanceMonitor
 from app.strategy.arbitrage_engine import ArbitrageOpportunity
@@ -68,6 +70,8 @@ class OrderExecutor:
         )
         # Performance monitoring
         self.monitor = PerformanceMonitor()
+        # Database session factory for persistence
+        self._session_factory = get_session_factory()
 
     async def execute_arbitrage(
         self,
@@ -437,6 +441,13 @@ class OrderExecutor:
                     f"Order placed: {order.order_id} on {exchange.name} "
                     f"{side} {quantity:.8f} @ {price if price else 'market'}"
                 )
+
+                # Persist order (best-effort)
+                await self._persist_order(
+                    order,
+                    getattr(exchange, "name", str(exchange)),
+                    status_override=order.status,
+                )
                 
                 # Record success for circuit breakers
                 exchange_name = getattr(exchange, 'name', str(exchange))
@@ -483,7 +494,23 @@ class OrderExecutor:
             success = await exchange.cancel_order(order_id, symbol)
             if success:
                 logger.info(f"Order cancelled: {order_id} on {exchange.name}")
-                self.active_orders.pop(order_id, None)
+                cached = self.active_orders.pop(order_id, None)
+                order_for_persist = cached or Order(
+                    order_id=order_id,
+                    symbol=symbol,
+                    side="cancel",
+                    order_type="",
+                    quantity=0.0,
+                    price=None,
+                    status="cancelled",
+                    timestamp=time.time(),
+                )
+                # Persist cancellation
+                await self._persist_order(
+                    order_for_persist,
+                    getattr(exchange, "name", str(exchange)),
+                    status_override="cancelled",
+                )
             return success
         except Exception as e:
             logger.error(f"Error cancelling order {order_id}: {e}")
@@ -510,6 +537,65 @@ class OrderExecutor:
             Dictionary of active orders
         """
         return self.active_orders.copy()
+
+    async def _persist_order(
+        self,
+        order: Order,
+        exchange_name: str,
+        *,
+        status_override: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Persist order state to database (best-effort)."""
+        try:
+            async with self._session_factory() as session:
+                await upsert_order(
+                    session,
+                    order_id=order.order_id,
+                    exchange=exchange_name,
+                    symbol=order.symbol,
+                    side=order.side,
+                    order_type=order.order_type,
+                    status=status_override or order.status,
+                    quantity=order.quantity,
+                    filled_quantity=order.filled_quantity,
+                    price=order.price,
+                    fee=getattr(order, "fee", None),
+                    fee_currency=None,
+                    average_price=getattr(order, "price", None),
+                    cost=None,
+                    exchange_order_id=order.order_id,
+                    error=error,
+                )
+        except Exception:
+            logger.exception("Failed to persist order %s on %s", order.order_id, exchange_name)
+
+    async def _persist_trade(
+        self,
+        order: Order,
+        exchange_name: str,
+        *,
+        realized_pnl: Optional[float] = None,
+    ) -> None:
+        """Persist trade/fill record when an order is filled."""
+        try:
+            if order.filled_quantity and order.filled_quantity > 0:
+                async with self._session_factory() as session:
+                    await add_trade(
+                        session,
+                        order_id=order.order_id,
+                        exchange=exchange_name,
+                        symbol=order.symbol,
+                        side=order.side,
+                        price=order.price,
+                        quantity=order.filled_quantity,
+                        fee=getattr(order, "fee", None),
+                        fee_currency=None,
+                        realized_pnl=realized_pnl,
+                        trade_id=getattr(order, "order_id", None),
+                    )
+        except Exception:
+            logger.exception("Failed to persist trade for order %s on %s", order.order_id, exchange_name)
 
     async def _verify_order_execution(
         self,
@@ -550,8 +636,19 @@ class OrderExecutor:
                 # Update active orders
                 self.active_orders[order.order_id] = updated_order
 
+                # Persist status change
+                await self._persist_order(
+                    updated_order,
+                    getattr(exchange, "name", str(exchange)),
+                    status_override=updated_order.status,
+                )
+
                 # Check if order is filled or cancelled
                 if updated_order.status == "filled":
+                    await self._persist_trade(
+                        updated_order,
+                        getattr(exchange, "name", str(exchange)),
+                    )
                     logger.info(
                         f"{side.capitalize()} order {order.order_id} filled: "
                         f"{updated_order.filled_quantity:.8f}/{updated_order.quantity:.8f} "
