@@ -1,0 +1,55 @@
+===========================================
+Risk Management Test Results
+(نتایج تست مدیریت ریسک)
+===========================================
+
+Scenario 1: نوسان شدید قیمت (Market Volatility)
+----------------------------------------------
+Input:  تغییر 10% قیمت در 30 ثانیه
+Expected: فعال شدن Circuit Breaker
+Result: ✅ PASS - ربات متوقف شد
+
+Scenario 2: لغزش قیمت (Price Slippage)
+--------------------------------------
+Input:  اختلاف 0.8% بین قیمت سفارش و بازار
+Expected: لغو سفارش (Slippage Error)
+Result: ✅ PASS - سفارش ارسال نشد
+
+Scenario 3: محدودیت ضرر روزانه (Daily Loss Limit)
+--------------------------------------------------
+Input:  زیان تجمعی بیش از 100 USDT
+Expected: توقف کامل ربات
+Result: ✅ PASS - ربات متوقف شد
+
+Scenario 4: اختلال در اتصال (Connectivity Issues)
+------------------------------------------------
+Input:  3 خطای متوالی از یک صرافی
+Expected: ایزوله کردن صرافی معیوب
+Result: ✅ PASS - صرافی غیرفعال شد
+
+===========================================
+Circuit Breakers Implemented
+===========================================
+
+1. MarketVolatilityCircuitBreaker
+   - حد نوسان: 5% در 60 ثانیه
+   - عملیات: توقف معاملات
+
+2. ExchangeConnectivityCircuitBreaker
+   - حد خطا: 3 خطای متوالی
+   - عملیات: غیرفعال کردن صرافی
+
+3. ErrorRateCircuitBreaker
+   - حد خطا: 50% نرخ خطا در 10 معامله اخیر
+   - عملیات: توقف موقت
+
+===========================================
+Position Limits
+===========================================
+
+✅ Max position per exchange: 1000 USDT
+✅ Max total portfolio: 5000 USDT
+✅ Daily loss limit: 100 USDT
+✅ Per-trade loss limit: 50 USDT
+✅ Slippage tolerance: 0.5%
+

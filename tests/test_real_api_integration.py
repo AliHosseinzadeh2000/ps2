@@ -325,12 +325,14 @@ async def test_real_ohlc_data(nobitex_exchange):
     )
     
     assert ohlc is not None
-    assert len(ohlc.candles) > 0
-    logger.info(f"✅ Retrieved {len(ohlc.candles)} OHLC candles")
+    assert isinstance(ohlc, list), "OHLC should be a list of OHLCData objects"
+    assert len(ohlc) > 0, f"No OHLC data returned for {symbol} - endpoint may be incorrect or symbol not supported"
+    
+    logger.info(f"✅ Retrieved {len(ohlc)} OHLC candles")
     
     # Log first candle
-    if ohlc.candles:
-        candle = ohlc.candles[0]
+    if ohlc:
+        candle = ohlc[0]
         logger.info(f"   First candle: O={candle.open:.2f}, H={candle.high:.2f}, "
                    f"L={candle.low:.2f}, C={candle.close:.2f}, V={candle.volume:.2f}")
 

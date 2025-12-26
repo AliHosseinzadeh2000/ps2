@@ -15,12 +15,12 @@ class TradingSymbol(str, Enum):
     BTCUSDT = "BTCUSDT"
     BTCIRT = "BTCIRT"
     BTCIRR = "BTCIRR"
-    
+
     # Ethereum pairs
     ETHUSDT = "ETHUSDT"
     ETHIRT = "ETHIRT"
     ETHIRR = "ETHIRR"
-    
+
     # Add more common pairs as needed
     # USDTUSDT = "USDTUSDT"  # If needed
     # LTCUSDT = "LTCUSDT"

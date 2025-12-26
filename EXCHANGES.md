@@ -27,11 +27,14 @@ This project now supports **5 cryptocurrency exchanges** for arbitrage trading:
 - **Base URL:** `https://api.wallex.ir`
 - **Symbol Format:** `BTCUSDT`, `ETHUSDT`, `USDTTMN` (USDT pairs, TMN for Toman market)
 - **Fees:** Maker 0.25% (0.0025), Taker 0.3% (0.003)
+- **Authentication:** HMAC-SHA256 signature with API key
+- **API Documentation:** https://developers.wallex.ir/intro
 - **Configuration:**
   ```bash
   WALLEX_API_KEY=your_key
   WALLEX_API_SECRET=your_secret
   ```
+  **Note:** Wallex uses HMAC-SHA256 signature authentication. The API key is sent in the `x-api-key` header (lowercase). Order placement endpoint is `/v1/account/orders` (POST).
 
 ### 3. KuCoin (`kucoin`)
 - **Type:** International Exchange

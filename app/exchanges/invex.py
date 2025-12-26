@@ -6,6 +6,7 @@ API Documentation: https://documenter.getpostman.com/view/29635700/2sA2r813me
 import binascii
 import json
 import time
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import httpx
@@ -14,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_der_private_key
 
 from app.core.config import InvexConfig
+from app.core.exchange_types import ExchangeName
 from app.exchanges.base import (
     Balance,
     ExchangeInterface,
@@ -29,7 +31,7 @@ from app.exchanges.exceptions import (
     ExchangeOrderError,
     ExchangeOrderNotFoundError,
 )
-from typing import List
+from app.utils.symbol_converter import ExchangeSymbolMapper
 from app.core.logging import get_logger
 from app.utils.retry import retry_with_backoff, RetryConfig
 from app.utils.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
@@ -104,28 +106,33 @@ class InvexExchange(ExchangeInterface):
         """
         Convert symbol format to Invex format (with underscore).
         
+        Uses the centralized ExchangeSymbolMapper to ensure consistency.
+        
         Args:
-            symbol: Trading pair symbol (e.g., 'BTCIRT', 'BTCUSDT')
+            symbol: Trading pair symbol (e.g., 'BTCIRT', 'BTCUSDT', 'BTCIRR')
             
         Returns:
             Invex format symbol (e.g., 'BTC_IRR', 'BTC_USDT')
+            
+        Raises:
+            ValueError: If symbol cannot be converted for Invex
         """
-        if '_' in symbol:
-            return symbol  # Already in correct format
+        # Use centralized symbol mapper for consistency
+        invex_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(symbol, ExchangeName.INVEX)
         
-        # Convert format like BTCIRT to BTC_IRR or BTCUSDT to BTC_USDT
-        if symbol.endswith('IRT'):
-            base = symbol[:-3]
-            return f"{base}_IRR"
-        elif symbol.endswith('USDT'):
-            base = symbol[:-4]
-            return f"{base}_USDT"
-        elif symbol.endswith('USD'):
-            base = symbol[:-3]
-            return f"{base}_USD"
-        else:
-            # Return as-is, API will validate
-            return symbol
+        if not invex_symbol:
+            # If conversion fails, try to provide helpful error
+            from app.utils.symbol_converter import SymbolConverter
+            base, quote = SymbolConverter._parse_symbol(symbol)
+            if base and quote:
+                supported_quotes = SymbolConverter.EXCHANGE_QUOTE_CURRENCIES.get(ExchangeName.INVEX, [])
+                raise ValueError(
+                    f"Symbol {symbol} (base: {base}, quote: {quote}) is not supported on Invex. "
+                    f"Invex supports quote currencies: {supported_quotes}"
+                )
+            raise ValueError(f"Cannot parse symbol format: {symbol}")
+        
+        return invex_symbol
 
     def _generate_signature(self, message: str) -> str:
         """
@@ -184,9 +191,11 @@ class InvexExchange(ExchangeInterface):
             if body_data is None:
                 body_data = {}
             
-            # expire_at should be Unix timestamp (seconds) + some buffer (e.g., 60 seconds)
-            expire_at = int(time.time()) + 60
-            body_data["expire_at"] = expire_at
+            # expire_at should be ISO format datetime string without timezone (naive datetime)
+            # Invex API expects ISO format string, and it compares with timezone-naive datetimes
+            expire_at_timestamp = int(time.time()) + 60
+            expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
+            body_data["expire_at"] = expire_at_iso
             
             # Create message for signing (sorted JSON string)
             message = json.dumps(body_data, sort_keys=True, separators=(",", ":"))
@@ -196,7 +205,7 @@ class InvexExchange(ExchangeInterface):
             
             headers["X-API-Key-Invex"] = self.api_key
             headers["X-API-Sign"] = signature
-            headers["X-API-Expire-At"] = str(expire_at)
+            headers["X-API-Expire-At"] = expire_at_iso
         
         return headers
 
@@ -411,12 +420,37 @@ class InvexExchange(ExchangeInterface):
         # Note: Invex doesn't have postOnly parameter in the interface
         # Maker orders are determined by order placement strategy
 
-        headers = self._get_headers("POST", endpoint, signed=True, body_data=payload)
+        # Prepare body data with expire_at for signing
+        # Invex requires expire_at in the request body
+        expire_at_timestamp = int(time.time()) + 60
+        expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
+        payload["expire_at"] = expire_at_iso
+        
+        # Create message for signing (sorted JSON string, WITHOUT signature field)
+        # Signature must be generated from body BEFORE adding signature field
+        message = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        
+        # Generate signature from the message (without signature field)
+        signature = self._generate_signature(message)
+        
+        # According to Invex API error "You need to provide signature in your request body!",
+        # the signature must be included in the JSON body
+        payload["signature"] = signature
+        
+        # Get headers - but we need to regenerate signature for headers since body now has signature
+        # Actually, headers signature should be from body WITHOUT signature field
+        # So we use the original message (without signature) for header signature
+        headers = {"Content-Type": "application/json"}
+        if self.api_key and self.api_secret:
+            headers["X-API-Key-Invex"] = self.api_key
+            headers["X-API-Sign"] = signature  # Same signature
+            headers["X-API-Expire-At"] = expire_at_iso
 
         try:
+            logger.debug(f"Invex place_order: endpoint={endpoint}, payload={payload}")
             response = await client.post(
                 endpoint,
-                json=payload,
+                json=payload,  # payload includes expire_at and signature
                 headers=headers,
             )
             response.raise_for_status()
@@ -444,6 +478,19 @@ class InvexExchange(ExchangeInterface):
                 status="pending",
                 timestamp=time.time(),
             )
+        except httpx.HTTPStatusError as e:
+            # Try to extract error message from response
+            error_detail = str(e)
+            try:
+                error_body = e.response.json()
+                error_detail = error_body.get("message", error_body.get("error", error_body.get("detail", str(error_body))))
+            except:
+                error_detail = e.response.text[:200] if e.response.text else str(e)
+            raise ExchangeOrderError(
+                f"Failed to place order on Invex (HTTP {e.response.status_code}): {error_detail}",
+                exchange_name="Invex",
+                symbol=symbol,
+            ) from e
         except httpx.HTTPError as e:
             raise ExchangeOrderError(
                 f"Failed to place order on Invex: {e}",
@@ -555,9 +602,10 @@ class InvexExchange(ExchangeInterface):
         endpoint = "/orders"
         
         # Invex search orders requires expire_at and signature
-        expire_at = int(time.time()) + 60
+        expire_at_timestamp = int(time.time()) + 60
+        expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
         params = {
-            "expire_at": expire_at,
+            "expire_at": expire_at_iso,
             "status": "NOT_FILLED",  # Open orders
             "page": 1,
             "page_size": 100,
@@ -575,7 +623,7 @@ class InvexExchange(ExchangeInterface):
         headers = self._get_headers("GET", endpoint)
         headers["X-API-Key-Invex"] = self.api_key
         headers["X-API-Sign"] = signature
-        headers["X-API-Expire-At"] = str(expire_at)
+        headers["X-API-Expire-At"] = expire_at_iso
 
         try:
             response = await client.get(
@@ -637,10 +685,11 @@ class InvexExchange(ExchangeInterface):
         endpoint = "/order"
         
         # Invex get order requires expire_at and signature
-        expire_at = int(time.time()) + 60
+        expire_at_timestamp = int(time.time()) + 60
+        expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
         params = {
             "order_id": order_id,
-            "expire_at": expire_at,
+            "expire_at": expire_at_iso,
         }
 
         # Create message for signing
@@ -651,7 +700,7 @@ class InvexExchange(ExchangeInterface):
         headers = self._get_headers("GET", endpoint)
         headers["X-API-Key-Invex"] = self.api_key
         headers["X-API-Sign"] = signature
-        headers["X-API-Expire-At"] = str(expire_at)
+        headers["X-API-Expire-At"] = expire_at_iso
 
         try:
             response = await client.get(

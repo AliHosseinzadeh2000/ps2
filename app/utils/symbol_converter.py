@@ -74,22 +74,26 @@ class SymbolConverter:
         # Remove separators
         clean_symbol = symbol.replace("-", "").replace("_", "").upper()
 
-        # Common base currencies
-        base_currencies = ["BTC", "ETH", "LTC", "USDT", "USDC", "BNB", "ADA", "DOT", "LINK", "XRP"]
+        # Common base currencies (order matters - longer symbols first to avoid partial matches)
+        # USDT must come before USDC to avoid matching USDC as USD+C
+        base_currencies = ["BTC", "ETH", "LTC", "USDT", "USDC", "BNB", "ADA", "DOT", "LINK", "XRP", "BCH", "EOS", "XLM", "ETC", "TRX", "DOGE", "UNI", "DAI", "AAVE", "SHIB", "FTM", "MATIC", "AXS", "MANA", "SAND", "AVAX", "MKR", "GMT", "ATOM", "SOL", "NEAR", "TON", "FIL", "APT", "ARB"]
         quote_currencies = ["USDT", "USDC", "IRT", "IRR", "TMN", "BTC", "ETH"]
 
-        # Try to find base currency
-        for base in base_currencies:
+        # Try to find base currency first (prioritize longer matches)
+        # Sort by length descending to match longer symbols first
+        sorted_bases = sorted(base_currencies, key=len, reverse=True)
+        for base in sorted_bases:
             if clean_symbol.startswith(base):
                 quote = clean_symbol[len(base):]
                 if quote in quote_currencies:
                     return base, quote
 
-        # Fallback: try to split at common patterns
-        for quote in quote_currencies:
+        # Fallback: try to split at quote currency (prioritize longer quotes)
+        sorted_quotes = sorted(quote_currencies, key=len, reverse=True)
+        for quote in sorted_quotes:
             if clean_symbol.endswith(quote):
                 base = clean_symbol[:-len(quote)]
-                if base:
+                if base and base in base_currencies:
                     return base, quote
 
         logger.warning(f"Could not parse symbol: {symbol}")

@@ -115,6 +115,13 @@ async def test_orderbook_fetching(symbol: str, all_exchanges: bool = False) -> D
     base_currency = SymbolConverter.get_base_currency(symbol)
     quote_currency = SymbolConverter.get_quote_currency(symbol)
     
+    if not base_currency or not quote_currency:
+        print(f"❌ Could not parse symbol: {symbol}")
+        print(f"   Expected format: BASEQUOTE (e.g., BTCUSDT, BTCIRT, USDTIRR)")
+        print(f"   Supported base currencies: BTC, ETH, LTC, USDT, USDC, BNB, ADA, DOT, LINK, XRP")
+        print(f"   Supported quote currencies: USDT, USDC, IRT, IRR, TMN, BTC, ETH")
+        return {}
+    
     print(f"\nFetching orderbooks for {symbol} (base: {base_currency}, quote: {quote_currency})...")
     
     orderbooks = {}
@@ -123,9 +130,39 @@ async def test_orderbook_fetching(symbol: str, all_exchanges: bool = False) -> D
             exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(symbol, name)
             
             if not exchange_symbol:
-                print(f"⚠️  {name.value}: No compatible symbol (supports: {SymbolConverter.EXCHANGE_QUOTE_CURRENCIES.get(name, [])})")
-                if not all_exchanges:
-                    continue
+                supported_quotes = SymbolConverter.EXCHANGE_QUOTE_CURRENCIES.get(name, [])
+                # Check if quote currency is compatible (IRT/IRR/TMN are interchangeable)
+                is_iranian = quote_currency.upper() in SymbolConverter.IRANIAN_CURRENCY_ALIASES
+                has_iranian_support = any(q in SymbolConverter.IRANIAN_CURRENCY_ALIASES for q in supported_quotes)
+                
+                if is_iranian and has_iranian_support:
+                    # Try to find compatible Iranian currency
+                    compatible_quote = None
+                    for iranian_q in SymbolConverter.IRANIAN_CURRENCY_ALIASES:
+                        if iranian_q in supported_quotes:
+                            compatible_quote = iranian_q
+                            break
+                    if compatible_quote:
+                        alt_symbol = f"{base_currency}{compatible_quote}"
+                        exchange_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(alt_symbol, name)
+                        if exchange_symbol:
+                            print(f"ℹ️  {name.value}: Using compatible symbol {exchange_symbol} (converted from {symbol})")
+                        else:
+                            print(f"⚠️  {name.value}: No compatible symbol for {symbol} (supports quotes: {supported_quotes})")
+                            if not all_exchanges:
+                                continue
+                    else:
+                        print(f"⚠️  {name.value}: No compatible symbol for {symbol} (supports quotes: {supported_quotes})")
+                        if not all_exchanges:
+                            continue
+                else:
+                    print(f"⚠️  {name.value}: No compatible symbol for {symbol} (supports quotes: {supported_quotes})")
+                    if not all_exchanges:
+                        continue
+            
+            # Skip if still no exchange_symbol found
+            if not exchange_symbol:
+                continue
             
             orderbook = await exchange.fetch_orderbook(exchange_symbol, depth=10)
             orderbooks[name.value] = orderbook

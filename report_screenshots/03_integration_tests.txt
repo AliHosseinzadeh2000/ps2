@@ -1,0 +1,213 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.0.1, pluggy-1.6.0 -- /home/ali/Desktop/sarbazi/code/ps2/venv/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /home/ali/Desktop/sarbazi/code/ps2
+plugins: asyncio-1.3.0, anyio-4.11.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 19 items
+
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_nobitex_authentication_with_token PASSED [  5%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_nobitex_authentication_with_username_password PASSED [ 10%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_nobitex_authentication_no_credentials PASSED [ 15%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_invex_authentication PASSED [ 21%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_invex_authentication_no_credentials PASSED [ 26%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_wallex_authentication PASSED [ 31%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_wallex_authentication_no_credentials PASSED [ 36%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_kucoin_authentication PASSED [ 42%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_kucoin_authentication_no_credentials PASSED [ 47%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_tabdeal_authentication PASSED [ 52%]
+tests/test_exchanges_integration.py::TestExchangeAuthentication::test_tabdeal_authentication_no_credentials PASSED [ 57%]
+tests/test_exchanges_integration.py::TestExchangeOrderbook::test_nobitex_fetch_orderbook PASSED [ 63%]
+tests/test_exchanges_integration.py::TestExchangeOrderbook::test_invex_fetch_orderbook PASSED [ 68%]
+tests/test_exchanges_integration.py::TestExchangeOrderbook::test_wallex_fetch_orderbook PASSED [ 73%]
+tests/test_exchanges_integration.py::TestExchangeErrorHandling::test_orderbook_http_error PASSED [ 78%]
+tests/test_exchanges_integration.py::TestExchangeErrorHandling::test_orderbook_invalid_response FAILED [ 84%]
+tests/test_exchanges_integration.py::TestExchangeSymbolConversion::test_invex_symbol_conversion PASSED [ 89%]
+tests/test_exchanges_integration.py::TestExchangeSymbolConversion::test_kucoin_symbol_conversion PASSED [ 94%]
+tests/test_exchanges_integration.py::TestExchangeMethods::test_all_exchanges_have_required_methods PASSED [100%]
+
+=================================== FAILURES ===================================
+E   AssertionError: assert 'Invalid Wallex response' in 'Cannot parse symbol format: INVALID'
+     +  where 'Cannot parse symbol format: INVALID' = str(ValueError('Cannot parse symbol format: INVALID'))
+     +    where ValueError('Cannot parse symbol format: INVALID') = <ExceptionInfo ValueError('Cannot parse symbol format: INVALID') tblen=3>.value
+------------------------------ Captured log call -------------------------------
+WARNING  app.utils.symbol_converter:symbol_converter.py:99 Could not parse symbol: INVALID
+WARNING  app.utils.symbol_converter:symbol_converter.py:99 Could not parse symbol: INVALID
+/home/ali/Desktop/sarbazi/code/ps2/tests/test_exchanges_integration.py:274: AssertionError: assert 'Invalid Wallex response' in 'Cannot parse symbol format: INVALID'
+=============================== warnings summary ===============================
+app/core/config.py:21
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:21: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_key: str = Field(default="", env="EXCHANGE_API_KEY")
+
+app/core/config.py:22
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:22: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_secret: str = Field(default="", env="EXCHANGE_API_SECRET")
+
+app/core/config.py:23
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:23: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    base_url: str = Field(default="", env="EXCHANGE_BASE_URL")
+
+app/core/config.py:18
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:18: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class ExchangeConfig(BaseSettings):
+
+app/core/config.py:41
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:41: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    username: str = Field(default="", env="NOBITEX_USERNAME")
+
+app/core/config.py:42
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:42: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    password: str = Field(default="", env="NOBITEX_PASSWORD")
+
+app/core/config.py:43
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:43: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    token: str = Field(default="", env="NOBITEX_TOKEN")  # Direct token (if you have it)
+
+app/core/config.py:44
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:44: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_key: str = Field(default="", env="NOBITEX_API_KEY")  # Legacy/experimental API key
+
+app/core/config.py:45
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:45: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_secret: str = Field(default="", env="NOBITEX_API_SECRET")  # Legacy/experimental API secret
+
+app/core/config.py:46
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:46: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    base_url: str = Field(default="https://apiv2.nobitex.ir", env="NOBITEX_BASE_URL")
+
+app/core/config.py:36
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:36: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class NobitexConfig(ExchangeConfig):
+
+app/core/config.py:60
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:60: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_key: str = Field(default="", env="WALLEX_API_KEY")
+
+app/core/config.py:61
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:61: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_secret: str = Field(default="", env="WALLEX_API_SECRET")
+
+app/core/config.py:62
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:62: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    base_url: str = Field(default="https://api.wallex.ir", env="WALLEX_BASE_URL")
+
+app/core/config.py:57
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:57: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class WallexConfig(ExchangeConfig):
+
+app/core/config.py:76
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:76: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_key: str = Field(default="", env="KUCOIN_API_KEY")
+
+app/core/config.py:77
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:77: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_secret: str = Field(default="", env="KUCOIN_API_SECRET")
+
+app/core/config.py:78
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:78: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_passphrase: str = Field(default="", env="KUCOIN_API_PASSPHRASE")
+
+app/core/config.py:79
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:79: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    base_url: str = Field(default="https://api.kucoin.com", env="KUCOIN_BASE_URL")
+
+app/core/config.py:73
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:73: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class KucoinConfig(ExchangeConfig):
+
+app/core/config.py:93
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:93: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_key: str = Field(default="", env="INVEX_API_KEY")
+
+app/core/config.py:94
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:94: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_secret: str = Field(default="", env="INVEX_API_SECRET")
+
+app/core/config.py:95
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:95: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    base_url: str = Field(default="https://api.invex.ir/trading/v1", env="INVEX_BASE_URL")
+
+app/core/config.py:90
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:90: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class InvexConfig(ExchangeConfig):
+
+app/core/config.py:112
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:112: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_key: str = Field(default="", env="TABDEAL_API_KEY")
+
+app/core/config.py:113
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:113: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_secret: str = Field(default="", env="TABDEAL_API_SECRET")
+
+app/core/config.py:114
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:114: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    base_url: str = Field(default="https://api.tabdeal.org", env="TABDEAL_BASE_URL")
+
+app/core/config.py:109
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:109: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class TabdealConfig(ExchangeConfig):
+
+app/core/config.py:125
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:125: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class TradingConfig(BaseSettings):
+
+app/core/config.py:157
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:157: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    model_path: str = Field(default="./models/xgboost_model.pkl", env="AI_MODEL_PATH")
+
+app/core/config.py:158
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:158: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    training_data_path: str = Field(
+
+app/core/config.py:154
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:154: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class AIConfig(BaseSettings):
+
+app/core/config.py:174
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:174: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    db_path: str = Field(default="data/bot_{mode}.db", env="DB_PATH")
+
+app/core/config.py:175
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:175: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    mode: str = Field(default="default", env="DB_MODE")
+
+app/core/config.py:176
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:176: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    echo_sql: bool = Field(default=False, env="DB_ECHO")
+
+app/core/config.py:171
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:171: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class DatabaseConfig(BaseSettings):
+
+app/core/config.py:188
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:188: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    host: str = Field(default="0.0.0.0", env="API_HOST")
+
+app/core/config.py:189
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:189: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    port: int = Field(default=8000, ge=1, le=65535, env="API_PORT")
+
+app/core/config.py:190
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:190: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    debug: bool = Field(default=False, env="API_DEBUG")
+
+app/core/config.py:185
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:185: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class APIConfig(BaseSettings):
+
+app/core/config.py:212
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:212: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    log_level: str = Field(default="DEBUG", env="LOG_LEVEL")
+
+app/core/config.py:213
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:213: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    environment: str = Field(default="development", env="ENVIRONMENT")
+
+app/core/config.py:200
+  /home/ali/Desktop/sarbazi/code/ps2/app/core/config.py:200: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class Settings(BaseSettings):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_exchanges_integration.py::TestExchangeErrorHandling::test_orderbook_invalid_response
+================== 1 failed, 18 passed, 43 warnings in 7.56s ===================

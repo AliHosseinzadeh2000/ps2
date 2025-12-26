@@ -8,6 +8,8 @@ from typing import Dict, List, Optional
 import httpx
 
 from app.core.config import WallexConfig
+from app.core.exchange_types import ExchangeName
+from app.core.logging import get_logger
 from app.exchanges.base import (
     Balance,
     ExchangeInterface,
@@ -16,6 +18,9 @@ from app.exchanges.base import (
     OrderBook,
     OrderBookEntry,
 )
+from app.utils.symbol_converter import ExchangeSymbolMapper
+
+logger = get_logger(__name__)
 
 
 class WallexExchange(ExchangeInterface):
@@ -61,6 +66,39 @@ class WallexExchange(ExchangeInterface):
         """
         return bool(self.api_key) and bool(self.api_secret)
 
+    def _convert_symbol_format(self, symbol: str) -> str:
+        """
+        Convert symbol format to Wallex format.
+        
+        Uses the centralized ExchangeSymbolMapper to ensure consistency.
+        Wallex supports USDT and TMN (not IRR/IRT).
+        
+        Args:
+            symbol: Trading pair symbol (e.g., 'BTCUSDT', 'BTCIRT', 'BTCIRR')
+            
+        Returns:
+            Wallex format symbol (e.g., 'BTCUSDT', 'BTCTMN')
+            
+        Raises:
+            ValueError: If symbol cannot be converted for Wallex
+        """
+        # Use centralized symbol mapper for consistency
+        wallex_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(symbol, ExchangeName.WALLEX)
+        
+        if not wallex_symbol:
+            # If conversion fails, try to provide helpful error
+            from app.utils.symbol_converter import SymbolConverter
+            base, quote = SymbolConverter._parse_symbol(symbol)
+            if base and quote:
+                supported_quotes = SymbolConverter.EXCHANGE_QUOTE_CURRENCIES.get(ExchangeName.WALLEX, [])
+                raise ValueError(
+                    f"Symbol {symbol} (base: {base}, quote: {quote}) is not supported on Wallex. "
+                    f"Wallex supports quote currencies: {supported_quotes}"
+                )
+            raise ValueError(f"Cannot parse symbol format: {symbol}")
+        
+        return wallex_symbol
+
     def _generate_signature(self, query_string: str) -> str:
         """
         Generate HMAC-SHA256 signature for authenticated requests.
@@ -93,8 +131,14 @@ class WallexExchange(ExchangeInterface):
         """
         headers = {"Content-Type": "application/json"}
         if signed and self.api_key:
-            headers["X-API-Key"] = self.api_key
-            if query_string:
+            # Wallex uses lowercase header name: x-api-key (not X-API-Key)
+            # According to Wallex API docs, POST requests only need x-api-key header
+            # Signature may not be required for POST /v1/account/orders
+            headers["x-api-key"] = self.api_key
+            # Only add signature if query_string is provided (for GET requests)
+            # POST requests to /v1/account/orders may not require signature
+            if query_string and not query_string.startswith("symbol="):
+                # Only sign for GET requests with query params
                 signature = self._generate_signature(query_string)
                 headers["X-API-Sign"] = signature
         return headers
@@ -114,7 +158,12 @@ class WallexExchange(ExchangeInterface):
         """
         client = await self._get_client()
         endpoint = "/v1/depth"
-        params = {"symbol": symbol}
+        
+        # Convert symbol format (e.g., BTCIRT -> BTCTMN, USDTIRR -> USDTTMN)
+        wallex_symbol = self._convert_symbol_format(symbol)
+        logger.debug(f"Wallex fetch_orderbook: symbol={symbol} (converted to {wallex_symbol}), depth={depth}")
+        
+        params = {"symbol": wallex_symbol}
 
         try:
             response = await client.get(
@@ -177,30 +226,66 @@ class WallexExchange(ExchangeInterface):
             raise ValueError("Price is required for limit orders")
 
         client = await self._get_client()
-        endpoint = "/v1/orders"
+        # Wallex API endpoint for creating orders: POST /v1/account/orders
+        # Documentation: https://developers.wallex.ir/spot/createorder
+        endpoint = "/v1/account/orders"
 
-        # Build query string for signature
-        query_params = {
-            "symbol": symbol,
+        # Convert symbol format (e.g., BTCIRT -> BTCTMN, USDTIRR -> USDTTMN)
+        wallex_symbol = self._convert_symbol_format(symbol)
+        logger.debug(f"Wallex place_order: symbol={symbol} (converted to {wallex_symbol})")
+
+        # Build payload for request according to Wallex API documentation
+        # All values must be strings as per Wallex API docs
+        # Format quantity and price as regular decimal strings (not scientific notation)
+        def format_decimal(value: float) -> str:
+            """Format float as decimal string, avoiding scientific notation.
+            
+            Wallex API requires decimal strings, not scientific notation.
+            Python's str() on very small floats can produce scientific notation,
+            so we use format with sufficient precision.
+            """
+            # Use format with enough precision to avoid scientific notation
+            # For very small numbers (< 0.0001), use more precision
+            if abs(value) < 0.0001:
+                formatted = f"{value:.12f}"
+            else:
+                formatted = f"{value:.8f}"
+            # Remove trailing zeros but keep at least one decimal place for small numbers
+            if '.' in formatted:
+                formatted = formatted.rstrip('0').rstrip('.')
+            return formatted
+        
+        payload = {
+            "symbol": wallex_symbol,
             "side": side.upper(),
             "type": order_type.upper(),
-            "quantity": str(quantity),
+            "quantity": format_decimal(quantity),
         }
 
+        # Price is required for limit orders
         if order_type == "limit":
-            query_params["price"] = str(price)
+            payload["price"] = format_decimal(price)
+        # For market orders, price is not required but may be optional
+        # Note: Wallex API docs show price as optional, but limit orders require it
 
-        if is_maker:
-            query_params["timeInForce"] = "GTD"  # Good Till Date / Post-Only
-            query_params["postOnly"] = "true"
-
-        # Create query string for signature
-        query_string = "&".join([f"{k}={v}" for k, v in sorted(query_params.items())])
+        # Note: Wallex doesn't have explicit maker/taker flags in the API
+        # Maker orders are determined by order placement strategy (post-only)
+        # For maker orders, we can add stop_Price or use limit orders with appropriate pricing
+        
+        # According to Wallex API documentation, POST /v1/account/orders
+        # only requires x-api-key header, no signature needed
+        # Create empty query_string since POST doesn't use query params for signature
+        query_string = ""
 
         try:
+            # Log the request for debugging
+            logger.debug(f"Wallex place_order: endpoint={endpoint}, payload={payload}")
+            
+            # Wallex API expects JSON body for POST requests
+            # Only x-api-key header is required, no signature
             response = await client.post(
                 endpoint,
-                json=query_params,
+                json=payload,
                 headers=self._get_headers(signed=True, query_string=query_string),
             )
             response.raise_for_status()
@@ -208,7 +293,15 @@ class WallexExchange(ExchangeInterface):
 
             # Wallex response format: {"result": {...}, "success": true}
             if not data.get("success"):
-                raise Exception(f"Wallex API error: {data}")
+                error_msg = data.get("message", data.get("error", str(data)))
+                # Log full response for debugging
+                logger.error(
+                    f"Wallex order failed: {error_msg}\n"
+                    f"  Full response: {data}\n"
+                    f"  Request payload: {payload}\n"
+                    f"  Symbol: {symbol} (verify this is a valid trading pair on Wallex)"
+                )
+                raise Exception(f"Wallex API error: {error_msg}")
 
             order_data = data.get("result", data)
             
@@ -234,6 +327,15 @@ class WallexExchange(ExchangeInterface):
                 filled_quantity=float(order_data.get("executedQty", order_data.get("executedQuantity", 0))),
                 timestamp=float(order_data.get("time", time.time())),
             )
+        except httpx.HTTPStatusError as e:
+            # Try to extract error message from response
+            error_detail = str(e)
+            try:
+                error_body = e.response.json()
+                error_detail = error_body.get("message", error_body.get("error", str(error_body)))
+            except:
+                error_detail = e.response.text[:200] if e.response.text else str(e)
+            raise Exception(f"Failed to place order on Wallex: {error_detail}") from e
         except httpx.HTTPError as e:
             raise Exception(f"Failed to place order on Wallex: {e}") from e
 
@@ -251,8 +353,11 @@ class WallexExchange(ExchangeInterface):
         client = await self._get_client()
         endpoint = f"/v1/orders/{order_id}"
 
+        # Convert symbol format
+        wallex_symbol = self._convert_symbol_format(symbol)
+
         # Build query string for signature
-        query_params = {"symbol": symbol}
+        query_params = {"symbol": wallex_symbol}
         query_string = "&".join([f"{k}={v}" for k, v in sorted(query_params.items())])
 
         try:
@@ -281,8 +386,11 @@ class WallexExchange(ExchangeInterface):
         client = await self._get_client()
         endpoint = f"/v1/orders/{order_id}"
 
+        # Convert symbol format
+        wallex_symbol = self._convert_symbol_format(symbol)
+
         # Build query string for signature
-        query_params = {"symbol": symbol}
+        query_params = {"symbol": wallex_symbol}
         query_string = "&".join([f"{k}={v}" for k, v in sorted(query_params.items())])
 
         try:
@@ -399,8 +507,12 @@ class WallexExchange(ExchangeInterface):
         """
         client = await self._get_client()
         endpoint = "/v1/klines"
+        
+        # Convert symbol format
+        wallex_symbol = self._convert_symbol_format(symbol)
+        
         params = {
-            "symbol": symbol,
+            "symbol": wallex_symbol,
             "interval": interval,
             "limit": limit,
         }
@@ -464,7 +576,9 @@ class WallexExchange(ExchangeInterface):
         # Build query string for signature
         query_params = {"status": "NEW"}  # Open orders
         if symbol:
-            query_params["symbol"] = symbol
+            # Convert symbol format
+            wallex_symbol = self._convert_symbol_format(symbol)
+            query_params["symbol"] = wallex_symbol
         query_string = "&".join([f"{k}={v}" for k, v in sorted(query_params.items())])
 
         try:

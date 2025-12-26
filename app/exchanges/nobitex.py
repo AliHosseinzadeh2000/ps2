@@ -556,8 +556,9 @@ class NobitexExchange(ExchangeInterface):
             List of OHLCData objects
         """
         client = await self._get_client()
-        # Nobitex OHLC endpoint: GET /v2/udf/history
-        endpoint = "/v2/udf/history"
+        # Nobitex OHLC endpoint: GET /market/udf/history
+        # Documentation: https://apidocs.nobitex.ir/
+        endpoint = "/market/udf/history"
         
         # Map interval to Nobitex resolution format
         interval_map = {
@@ -599,7 +600,16 @@ class NobitexExchange(ExchangeInterface):
             response.raise_for_status()
             data = response.json()
 
-            # Nobitex UDF format: {"t": [timestamps], "o": [opens], "h": [highs], "l": [lows], "c": [closes], "v": [volumes]}
+            # Nobitex UDF format: {"s": "ok", "t": [timestamps], "o": [opens], "h": [highs], "l": [lows], "c": [closes], "v": [volumes]}
+            # Check response status
+            if data.get("s") != "ok":
+                error_msg = data.get("errmsg", "Unknown error")
+                raise ExchangeAPIError(
+                    f"Nobitex OHLC API returned error: {error_msg}",
+                    exchange_name="Nobitex",
+                    response_data=data,
+                )
+            
             ohlc_list = []
             if "t" in data and "o" in data and len(data["t"]) > 0:
                 for i in range(len(data["t"])):
@@ -615,5 +625,14 @@ class NobitexExchange(ExchangeInterface):
                         )
                     )
             return ohlc_list
+        except httpx.HTTPStatusError as e:
+            raise ExchangeAPIError(
+                f"Failed to fetch OHLC from Nobitex: HTTP {e.response.status_code}",
+                exchange_name="Nobitex",
+                response_data=e.response.text[:500] if e.response.text else None,
+            ) from e
         except httpx.HTTPError as e:
-            raise Exception(f"Failed to fetch OHLC from Nobitex: {e}") from e
+            raise ExchangeAPIError(
+                f"Failed to fetch OHLC from Nobitex: {e}",
+                exchange_name="Nobitex",
+            ) from e

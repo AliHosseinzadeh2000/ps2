@@ -223,10 +223,6 @@ class Settings(BaseSettings):
 
 # Global settings instance
 # Note: We load .env at module level (above) using load_dotenv to populate os.environ.
-# However, BaseSettings doesn't automatically read from os.environ when using Field(env=...).
-# We need to manually pass environment variables or use _env_file parameter.
-# Since nested BaseSettings don't work well with .env files (they see all vars),
-# we manually extract only the needed env vars and pass them.
 import os as _os
 
 def _get_env_or_default(key: str, default: str = "") -> str:
@@ -265,4 +261,3 @@ settings = Settings(
     log_level=_settings_temp.log_level,
     environment=_settings_temp.environment,
 )
-

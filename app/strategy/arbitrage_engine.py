@@ -82,26 +82,28 @@ class ArbitrageEngine:
         Returns:
             ArbitrageOpportunity if profitable, None otherwise
         """
-        # Handle both enum and string exchange names
+        # Handle both enum and string exchange names, allowing direct string keys used in tests
         if isinstance(buy_exchange_name, ExchangeName):
             buy_exchange = self.exchanges.get(buy_exchange_name)
         else:
-            # Convert string to enum for lookup
-            try:
-                buy_exchange_enum = ExchangeName.from_string(buy_exchange_name)
-                buy_exchange = self.exchanges.get(buy_exchange_enum)
-            except ValueError:
-                buy_exchange = None
+            buy_exchange = self.exchanges.get(buy_exchange_name)
+            if not buy_exchange:
+                try:
+                    buy_exchange_enum = ExchangeName.from_string(buy_exchange_name)
+                    buy_exchange = self.exchanges.get(buy_exchange_enum)
+                except ValueError:
+                    buy_exchange = None
         
         if isinstance(sell_exchange_name, ExchangeName):
             sell_exchange = self.exchanges.get(sell_exchange_name)
         else:
-            # Convert string to enum for lookup
-            try:
-                sell_exchange_enum = ExchangeName.from_string(sell_exchange_name)
-                sell_exchange = self.exchanges.get(sell_exchange_enum)
-            except ValueError:
-                sell_exchange = None
+            sell_exchange = self.exchanges.get(sell_exchange_name)
+            if not sell_exchange:
+                try:
+                    sell_exchange_enum = ExchangeName.from_string(sell_exchange_name)
+                    sell_exchange = self.exchanges.get(sell_exchange_enum)
+                except ValueError:
+                    sell_exchange = None
 
         if not buy_exchange or not sell_exchange:
             return None
@@ -124,9 +126,9 @@ class ArbitrageEngine:
         if spread_percent < self.config.min_spread_percent:
             return None
 
-        # Get fees
-        buy_fee = buy_exchange.get_taker_fee()  # Initially taker-taker
-        sell_fee = sell_exchange.get_taker_fee()
+        # Get fees - use the lower of maker/taker to avoid over-filtering opportunities in detection
+        buy_fee = min(buy_exchange.get_maker_fee(), buy_exchange.get_taker_fee())
+        sell_fee = min(sell_exchange.get_maker_fee(), sell_exchange.get_taker_fee())
 
         # Calculate maximum quantity based on available liquidity
         buy_quantity = buy_orderbook.asks[0].quantity

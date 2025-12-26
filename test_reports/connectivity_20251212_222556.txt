@@ -1,0 +1,30 @@
+================================================================================
+EXCHANGE CONNECTIVITY VERIFICATION
+================================================================================
+Date: 2025-12-12 22:25:56
+
+Testing Nobitex... ✅ OK (418ms)
+Testing Wallex... ✅ OK (968ms)
+Testing Invex... ✅ OK (922ms)
+Testing KuCoin... ❌ FAILED
+   Error: Failed to fetch orderbook from KuCoin: Client error '404 Not Found' for url 'https://api.kucoin.com/
+Testing Tabdeal... ✅ OK (923ms)
+
+================================================================================
+SUMMARY
+================================================================================
+
+Exchange     Auth   Orderbook  Depth   Best Bid     Best Ask     Spread     Time(ms)  
+------------------------------------------------------------------------------------------------------------------------
+Nobitex      ❌      ✅          20      115633385970.00 115644935300.00 11549330.00 418       
+Wallex       ❌      ✅          20      90603.28     90609.30     6.02       968       
+Invex        ❌      ✅          20      90456.00     90619.09     163.09     922       
+KuCoin       ❌      ❌          -       -            -            -          -         
+Tabdeal      ❌      ✅          20      11537770318.00 11565097762.00 27327444.00 923       
+
+Total Exchanges: 5
+Authenticated: 0/5
+Operational: 4/5
+
+⚠️  MOSTLY OPERATIONAL (1 exchange down)
+================================================================================

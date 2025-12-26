@@ -1,0 +1,67 @@
+===========================================
+Project Structure (معماری پروژه)
+===========================================
+
+app/
+├── exchanges/           # پیاده‌سازی صرافی‌ها
+│   ├── base.py         # ExchangeInterface (رابط پایه)
+│   ├── nobitex.py      # صرافی نوبیتکس
+│   ├── wallex.py       # صرافی والکس
+│   ├── invex.py        # صرافی اینوکس (RSA Authentication)
+│   ├── kucoin.py       # صرافی کوکوین
+│   └── tabdeal.py      # صرافی تبدیل
+│
+├── strategy/            # الگوریتم‌های معاملاتی
+│   ├── arbitrage_engine.py    # موتور آربیتراژ
+│   ├── order_executor.py      # اجراکننده سفارشات
+│   ├── price_stream.py        # جریان قیمت
+│   └── circuit_breakers.py    # قطع‌کننده‌های مدار
+│
+├── ai/                  # ماژول هوش مصنوعی (آماده برای فاز 3)
+│   ├── model.py        # XGBoost Model Wrapper
+│   ├── trainer.py      # Training Pipeline
+│   ├── predictor.py    # Real-time Predictor
+│   └── features.py     # Feature Engineering (SMA, EMA, etc.)
+│
+├── utils/               # ابزارهای کمکی
+│   └── symbol_converter.py    # تبدیل نماد بین صرافی‌ها
+│
+├── core/                # هسته سیستم
+│   ├── config.py       # تنظیمات (Pydantic)
+│   ├── logging.py      # سیستم لاگ
+│   └── exchange_types.py      # Enum‌ها و Type‌ها
+│
+├── api/                 # FastAPI Backend
+│   ├── main.py         # نقطه ورود
+│   └── routes/         # Endpoint‌ها
+│       ├── metrics.py
+│       ├── orders.py
+│       ├── ai.py
+│       └── risk.py
+│
+└── db/                  # پایگاه داده (SQLite + SQLAlchemy)
+    ├── db.py
+    └── models.py
+
+tests/                   # تست‌ها
+├── test_arbitrage.py
+├── test_ai.py
+├── test_executor.py
+├── test_exchanges_integration.py
+└── test_real_api_integration.py
+
+===========================================
+Key Features Implemented
+===========================================
+
+✅ ExchangeInterface (Strategy Pattern)
+✅ Async Architecture (asyncio + httpx)
+✅ Symbol Converter (IRT/IRR/TMN handling)
+✅ Arbitrage Engine (با محاسبات دقیق ریاضی)
+✅ Risk Management (Circuit Breakers, Slippage Protection)
+✅ Order Executor (با Retry Logic)
+✅ Authentication (Token, RSA, HMAC-SHA256)
+✅ Database Persistence (SQLite)
+✅ AI Infrastructure (آماده برای آموزش)
+✅ FastAPI Backend
+

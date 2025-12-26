@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.0.1, pluggy-1.6.0 -- /home/ali/Desktop/sarbazi/code/ps2/venv/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /home/ali/Desktop/sarbazi/code/ps2
+plugins: asyncio-1.3.0, anyio-4.11.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... ERROR: file or directory not found: tests/test_exchanges.py
+
+collected 0 items
+
+============================ no tests ran in 0.00s =============================

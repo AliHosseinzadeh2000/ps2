@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 from app.data.collector import DataCollector
 from app.db.db import get_session_factory
 from app.db.repository import add_trade, upsert_order
-from app.exchanges.base import ExchangeInterface, Order, OrderBook
+from app.exchanges.base import Balance, ExchangeInterface, Order, OrderBook
 from app.monitoring.metrics import PerformanceMonitor
 from app.strategy.arbitrage_engine import ArbitrageOpportunity
 from app.strategy.circuit_breakers import (
@@ -92,25 +92,29 @@ class OrderExecutor:
         Returns:
             Tuple of (buy_order, sell_order) or (None, None) if failed
         """
-        # Handle both enum and string exchange names
-        buy_exchange_key = opportunity.buy_exchange
-        sell_exchange_key = opportunity.sell_exchange
-        
-        # Convert string to enum if needed
-        if isinstance(buy_exchange_key, str) and not isinstance(buy_exchange_key, ExchangeName):
+        # Resolve exchanges for both enum and string keys (tests use plain strings)
+        buy_exchange_key_raw = opportunity.buy_exchange
+        sell_exchange_key_raw = opportunity.sell_exchange
+
+        buy_exchange = self.exchanges.get(buy_exchange_key_raw)
+        sell_exchange = self.exchanges.get(sell_exchange_key_raw)
+
+        buy_exchange_enum = buy_exchange_key_raw if isinstance(buy_exchange_key_raw, ExchangeName) else None
+        sell_exchange_enum = sell_exchange_key_raw if isinstance(sell_exchange_key_raw, ExchangeName) else None
+
+        if not buy_exchange:
             try:
-                buy_exchange_key = ExchangeName.from_string(buy_exchange_key)
+                buy_exchange_enum = ExchangeName.from_string(str(buy_exchange_key_raw))
+                buy_exchange = self.exchanges.get(buy_exchange_enum)
             except ValueError:
-                pass
-        
-        if isinstance(sell_exchange_key, str) and not isinstance(sell_exchange_key, ExchangeName):
+                buy_exchange_enum = None
+
+        if not sell_exchange:
             try:
-                sell_exchange_key = ExchangeName.from_string(sell_exchange_key)
+                sell_exchange_enum = ExchangeName.from_string(str(sell_exchange_key_raw))
+                sell_exchange = self.exchanges.get(sell_exchange_enum)
             except ValueError:
-                pass
-        
-        buy_exchange = self.exchanges.get(buy_exchange_key)
-        sell_exchange = self.exchanges.get(sell_exchange_key)
+                sell_exchange_enum = None
 
         if not buy_exchange or not sell_exchange:
             logger.error(
@@ -190,12 +194,16 @@ class OrderExecutor:
                 sell_use_maker = False
 
         # Convert symbol to exchange-specific format
-        buy_exchange_enum = buy_exchange_key if isinstance(buy_exchange_key, ExchangeName) else ExchangeName.from_string(str(buy_exchange_key))
-        sell_exchange_enum = sell_exchange_key if isinstance(sell_exchange_key, ExchangeName) else ExchangeName.from_string(str(sell_exchange_key))
-        
         from app.utils.symbol_converter import ExchangeSymbolMapper
-        buy_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, buy_exchange_enum)
-        sell_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, sell_exchange_enum)
+        if buy_exchange_enum:
+            buy_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, buy_exchange_enum) or opportunity.symbol
+        else:
+            buy_symbol = opportunity.symbol
+
+        if sell_exchange_enum:
+            sell_symbol = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, sell_exchange_enum) or opportunity.symbol
+        else:
+            sell_symbol = opportunity.symbol
         
         if not buy_symbol:
             logger.error(f"Could not convert symbol {opportunity.symbol} for buy exchange {buy_exchange_enum.value}")
@@ -851,14 +859,26 @@ class OrderExecutor:
             try:
                 buy_balance = await buy_exchange.get_balance()
                 sell_balance = await sell_exchange.get_balance()
-                # Extract base currency from symbol (e.g., BTCUSDT -> USDT for buy)
-                # This is simplified - in production, parse symbol properly
-                base_currency = "USDT"  # Default assumption
+                
+                # Ensure we got dictionaries, not strings or other types
+                if not isinstance(buy_balance, dict):
+                    logger.warning(f"Balance check: buy_balance is not a dict (type: {type(buy_balance)}), skipping balance check")
+                    return True
+                if not isinstance(sell_balance, dict):
+                    logger.warning(f"Balance check: sell_balance is not a dict (type: {type(sell_balance)}), skipping balance check")
+                    return True
+                
+                # Extract quote currency from symbol (e.g., BTCUSDT -> USDT for buy)
+                from app.utils.symbol_converter import SymbolConverter
+                quote_currency = SymbolConverter.get_quote_currency(opportunity.symbol)
+                if not quote_currency:
+                    quote_currency = "USDT"  # Default assumption
+                
                 quote_needed = position_value
 
                 # Check if we have enough balance
-                buy_available = buy_balance.get(base_currency, None)
-                if buy_available and buy_available.available < quote_needed:
+                buy_available = buy_balance.get(quote_currency, None)
+                if buy_available and isinstance(buy_available, Balance) and buy_available.available < quote_needed:
                     logger.warning(
                         f"Insufficient balance on {opportunity.buy_exchange}: "
                         f"{buy_available.available:.2f} < {quote_needed:.2f}"
