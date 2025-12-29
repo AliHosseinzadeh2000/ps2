@@ -243,17 +243,34 @@ class SymbolConverter:
     @staticmethod
     def normalize_symbol(symbol: str) -> str:
         """
-        Normalize symbol to standard format (no separators, uppercase).
+        Normalize symbol to standard format (no separators, uppercase, canonical quote currency).
+
+        Normalizes Iranian currencies to IRT (the canonical form):
+        - IRR -> IRT
+        - TMN -> IRT
 
         Args:
-            symbol: Any symbol format
+            symbol: Any symbol format (e.g., "BTC-USDT", "BTCIRR", "BTC_TMN")
 
         Returns:
-            Normalized symbol (e.g., "BTCUSDT")
+            Normalized symbol (e.g., "BTCUSDT", "BTCIRT")
         """
         if not symbol:
             return symbol
-        return symbol.replace("-", "").replace("_", "").upper()
+
+        # Remove separators and convert to uppercase
+        clean_symbol = symbol.replace("-", "").replace("_", "").upper()
+
+        # Parse to get base and quote currencies
+        base, quote = SymbolConverter._parse_symbol(clean_symbol)
+        if not base or not quote:
+            return clean_symbol  # Return as-is if can't parse
+
+        # Normalize Iranian currencies to IRT (canonical form)
+        if quote in ["IRR", "TMN"]:
+            quote = "IRT"
+
+        return f"{base}{quote}"
 
 
 class ExchangeSymbolMapper:

@@ -392,23 +392,29 @@ class NobitexExchange(ExchangeInterface):
             response.raise_for_status()
             data = response.json()
 
-            # Response format: {"status": "ok", "wallets": [{"currency": "...", "available": "...", "blocked": "..."}, ...]}
+            # Response format: {"status": "ok", "wallets": {"RLS": {"id": ..., "balance": "...", "blocked": "..."}, ...}}
             if data.get("status") != "ok":
                 raise Exception(f"Nobitex API error: {data}")
 
             balances = {}
-            wallets = data.get("wallets", [])
+            wallets = data.get("wallets", {})
 
-            for wallet in wallets:
-                curr = wallet.get("currency", "").upper()
-                if currency and curr != currency.upper():
-                    continue
+            # Nobitex returns wallets as a dict with currency names as keys
+            if isinstance(wallets, dict):
+                for curr, wallet_data in wallets.items():
+                    curr_upper = curr.upper()
 
-                balances[curr] = Balance(
-                    currency=curr,
-                    available=float(wallet.get("available", 0)),
-                    locked=float(wallet.get("blocked", 0)),
-                )
+                    # Filter by requested currency if specified
+                    if currency and curr_upper != currency.upper():
+                        continue
+
+                    # wallet_data format: {"id": 123, "balance": "100.0", "blocked": "0"}
+                    if isinstance(wallet_data, dict):
+                        balances[curr_upper] = Balance(
+                            currency=curr_upper,
+                            available=float(wallet_data.get("balance", 0)),
+                            locked=float(wallet_data.get("blocked", 0)),
+                        )
 
             return balances
         except httpx.HTTPError as e:

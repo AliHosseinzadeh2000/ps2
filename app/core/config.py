@@ -93,9 +93,8 @@ class InvexConfig(ExchangeConfig):
     api_key: str = Field(default="", env="INVEX_API_KEY")
     api_secret: str = Field(default="", env="INVEX_API_SECRET")
     base_url: str = Field(default="https://api.invex.ir/trading/v1", env="INVEX_BASE_URL")
-    maker_fee: float = Field(default=0.0025)  # 0.25% for Toman market
-    taker_fee: float = Field(default=0.0025)  # 0.25% for Toman market
-    # Note: Tether market fees are Maker 0.1%, Taker 0.13% (can be configured per market)
+    maker_fee: float = Field(default=0.0020)  # 0.20% for both Toman and Tether markets
+    taker_fee: float = Field(default=0.0025)  # 0.25% for both Toman and Tether markets
 
     class Config:
         """Pydantic config."""

@@ -250,26 +250,26 @@ class EndToEndTester:
             )
 
             # Test volatility breaker
-            vol_breaker = MarketVolatilityCircuitBreaker(max_volatility_percent=5.0, time_window_seconds=60)
+            vol_breaker = MarketVolatilityCircuitBreaker(max_volatility_percent=5.0, window_seconds=60, min_samples=2)
             print("  Testing volatility circuit breaker...")
 
             # Simulate normal price change (should not trip)
-            vol_breaker.update_price(100.0)
+            vol_breaker.check_volatility("BTCUSDT", 100.0)
             await asyncio.sleep(0.1)
-            vol_breaker.update_price(102.0)  # 2% change
+            result = vol_breaker.check_volatility("BTCUSDT", 102.0)  # 2% change
 
-            if not vol_breaker.is_halted():
+            if result and not vol_breaker.is_halted():
                 print("    ✅ Normal volatility: Trading continues")
             else:
                 print("    ❌ False positive: Breaker tripped on normal volatility")
                 return False
 
             # Simulate extreme volatility (should trip)
-            vol_breaker2 = MarketVolatilityCircuitBreaker(max_volatility_percent=5.0, time_window_seconds=60)
-            vol_breaker2.update_price(100.0)
-            vol_breaker2.update_price(110.0)  # 10% change
+            vol_breaker2 = MarketVolatilityCircuitBreaker(max_volatility_percent=5.0, window_seconds=60, min_samples=2)
+            vol_breaker2.check_volatility("BTCUSDT", 100.0)
+            result = vol_breaker2.check_volatility("BTCUSDT", 110.0)  # 10% change
 
-            if vol_breaker2.is_halted():
+            if not result or vol_breaker2.is_halted():
                 print("    ✅ Extreme volatility: Circuit breaker activated")
             else:
                 print("    ⚠️  Warning: Breaker did NOT trip on 10% change")
@@ -278,16 +278,17 @@ class EndToEndTester:
             conn_breaker = ExchangeConnectivityCircuitBreaker(max_failures=3)
             print("\n  Testing connectivity circuit breaker...")
 
-            conn_breaker.record_failure()
-            conn_breaker.record_failure()
-            if not conn_breaker.is_halted():
+            test_exchange = "test_exchange"
+            conn_breaker.record_failure(test_exchange)
+            conn_breaker.record_failure(test_exchange)
+            if not conn_breaker.is_halted(test_exchange):
                 print("    ✅ 2 failures: Trading continues")
             else:
                 print("    ❌ False positive: Breaker tripped too early")
                 return False
 
-            conn_breaker.record_failure()
-            if conn_breaker.is_halted():
+            conn_breaker.record_failure(test_exchange)
+            if conn_breaker.is_halted(test_exchange):
                 print("    ✅ 3 failures: Circuit breaker activated")
             else:
                 print("    ❌ CRITICAL: Breaker did NOT trip after 3 failures!")
