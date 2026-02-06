@@ -198,6 +198,8 @@ class TabdealExchange(ExchangeInterface):
         client = await self._get_client()
         endpoint = "/api/v1/orders"
 
+        # NOTE: is_maker parameter is currently ignored (Phase 2 limitation)
+        # TODO PHASE 3: Implement proper maker/taker support with price buffering
         payload = {
             "symbol": symbol,
             "side": side.lower(),
@@ -208,8 +210,7 @@ class TabdealExchange(ExchangeInterface):
         if order_type == "limit":
             payload["price"] = str(price)
 
-        if is_maker:
-            payload["postOnly"] = True
+        # postOnly removed - Phase 2 uses taker mode only
 
         # Tabdeal: Convert payload to query params for signature, then send as JSON body
         # But signature is calculated from query string format

@@ -126,9 +126,10 @@ class ArbitrageEngine:
         if spread_percent < self.config.min_spread_percent:
             return None
 
-        # Get fees - use the lower of maker/taker to avoid over-filtering opportunities in detection
-        buy_fee = min(buy_exchange.get_maker_fee(), buy_exchange.get_taker_fee())
-        sell_fee = min(sell_exchange.get_maker_fee(), sell_exchange.get_taker_fee())
+        # Get fees - ALWAYS use taker fees (Phase 2: maker mode disabled)
+        # TODO PHASE 3: Use maker fees when buffer strategy is implemented
+        buy_fee = buy_exchange.get_taker_fee()
+        sell_fee = sell_exchange.get_taker_fee()
 
         # Calculate maximum quantity based on available liquidity
         buy_quantity = buy_orderbook.asks[0].quantity

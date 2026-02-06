@@ -268,9 +268,10 @@ class WallexExchange(ExchangeInterface):
         # For market orders, price is not required but may be optional
         # Note: Wallex API docs show price as optional, but limit orders require it
 
-        # Note: Wallex doesn't have explicit maker/taker flags in the API
-        # Maker orders are determined by order placement strategy (post-only)
-        # For maker orders, we can add stop_Price or use limit orders with appropriate pricing
+        # NOTE: is_maker parameter is currently ignored (Phase 2 limitation)
+        # TODO PHASE 3: Implement proper maker/taker support with price buffering
+        # Wallex doesn't support postOnly flag - all limit orders can become takers
+        # Need volatility-based price buffering to prevent accidental taker execution
         
         # According to Wallex API documentation, POST /v1/account/orders
         # only requires x-api-key header, no signature needed

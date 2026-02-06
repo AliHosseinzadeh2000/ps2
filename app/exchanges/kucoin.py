@@ -270,6 +270,8 @@ class KucoinExchange(ExchangeInterface):
         else:
             kucoin_symbol = symbol
 
+        # NOTE: is_maker parameter is currently ignored (Phase 2 limitation)
+        # TODO PHASE 3: Implement proper maker/taker support with price buffering
         payload = {
             "clientOid": f"arbitrage_{int(time.time() * 1000)}",
             "side": side.lower(),
@@ -281,8 +283,7 @@ class KucoinExchange(ExchangeInterface):
         if order_type == "limit":
             payload["price"] = str(price)
 
-        if is_maker:
-            payload["postOnly"] = True
+        # postOnly removed - Phase 2 uses taker mode only
 
         body = str(payload)
         try:

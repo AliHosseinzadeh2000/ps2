@@ -20,7 +20,6 @@ from app.strategy.circuit_breakers import (
     ExchangeConnectivityCircuitBreaker,
     ErrorRateCircuitBreaker,
 )
-from app.utils.math import adjust_price_for_arbitrage
 
 logger = get_logger(__name__)
 
@@ -130,68 +129,35 @@ class OrderExecutor:
             )
             return None, None
 
-        # Determine maker/taker using AI if predictor available and use_maker not explicitly set
-        buy_use_maker = use_maker if use_maker is not None else False
-        sell_use_maker = use_maker if use_maker is not None else False
+        # ========================================================================
+        # TODO PHASE 3: Re-enable maker/taker optimization with buffer strategy
+        # ========================================================================
+        # Currently DISABLED because:
+        # 1. Most Iranian exchanges don't support Post-Only flag reliably
+        # 2. Without proper price buffering, limit orders can become takers accidentally
+        # 3. This causes fee calculation mismatch (calculating with maker fees, paying taker fees)
+        #
+        # For Phase 3 implementation:
+        # - Implement volatility-based price buffering (Gemini's strategy)
+        # - Price = Best_Ask - (Base_Buffer + α × Volatility)
+        # - Add safety margin to prevent accidental taker execution
+        # - Monitor actual fees paid vs expected fees
+        # - Alert on unexpected taker fills
+        # ========================================================================
+
+        # FORCE TAKER MODE (safe and predictable execution)
+        buy_use_maker = False
+        sell_use_maker = False
         buy_price = opportunity.buy_price
         sell_price = opportunity.sell_price
 
-        if use_maker is None and self.predictor and self.predictor.is_ready():
-            try:
-                # Convert symbols to exchange-specific format for orderbook fetching
-                buy_exchange_enum_temp = buy_exchange_key if isinstance(buy_exchange_key, ExchangeName) else ExchangeName.from_string(str(buy_exchange_key))
-                sell_exchange_enum_temp = sell_exchange_key if isinstance(sell_exchange_key, ExchangeName) else ExchangeName.from_string(str(sell_exchange_key))
-                
-                from app.utils.symbol_converter import ExchangeSymbolMapper
-                buy_symbol_for_orderbook = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, buy_exchange_enum_temp) or opportunity.symbol
-                sell_symbol_for_orderbook = ExchangeSymbolMapper.get_symbol_for_exchange(opportunity.symbol, sell_exchange_enum_temp) or opportunity.symbol
-                
-                # Fetch orderbooks if not provided
-                if buy_orderbook is None:
-                    buy_orderbook = await buy_exchange.fetch_orderbook(buy_symbol_for_orderbook)
-                if sell_orderbook is None:
-                    sell_orderbook = await sell_exchange.fetch_orderbook(sell_symbol_for_orderbook)
+        logger.info(
+            f"Using TAKER mode for both orders (maker optimization disabled until Phase 3)"
+        )
 
-                # Get AI predictions
-                buy_is_maker, buy_prob, buy_pred_price = self.predictor.predict_from_orderbook(
-                    buy_orderbook
-                )
-                sell_is_maker, sell_prob, sell_pred_price = self.predictor.predict_from_orderbook(
-                    sell_orderbook
-                )
-
-                buy_use_maker = buy_is_maker
-                sell_use_maker = sell_is_maker
-
-                # Use predicted prices if regressor is available, adjusting to maintain profitability
-                if self.predictor.has_price_prediction():
-                    if buy_pred_price > 0:
-                        buy_price = adjust_price_for_arbitrage(
-                            buy_pred_price,
-                            opportunity.buy_price,
-                            opportunity.sell_price,
-                            is_buy=True,
-                        )
-                    if sell_pred_price > 0:
-                        sell_price = adjust_price_for_arbitrage(
-                            sell_pred_price,
-                            opportunity.buy_price,
-                            opportunity.sell_price,
-                            is_buy=False,
-                        )
-
-                logger.info(
-                    f"AI prediction: buy_maker={buy_is_maker} (prob={buy_prob:.3f}), "
-                    f"sell_maker={sell_is_maker} (prob={sell_prob:.3f})"
-                )
-
-                # Record predictions for monitoring
-                self.monitor.record_prediction(buy_is_maker, buy_prob)
-                self.monitor.record_prediction(sell_is_maker, sell_prob)
-            except Exception as e:
-                logger.warning(f"AI prediction failed, using taker: {e}")
-                buy_use_maker = False
-                sell_use_maker = False
+        # AI maker/taker prediction code DISABLED - preserved for Phase 3
+        # if use_maker is None and self.predictor and self.predictor.is_ready():
+        #     [AI prediction code here - see git history]
 
         # Convert symbol to exchange-specific format
         from app.utils.symbol_converter import ExchangeSymbolMapper

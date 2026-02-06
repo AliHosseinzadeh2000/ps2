@@ -416,9 +416,11 @@ class InvexExchange(ExchangeInterface):
 
         if order_type == "limit":
             payload["price"] = str(price)
-        
-        # Note: Invex doesn't have postOnly parameter in the interface
-        # Maker orders are determined by order placement strategy
+
+        # NOTE: is_maker parameter is currently ignored (Phase 2 limitation)
+        # TODO PHASE 3: Implement proper maker/taker support with price buffering
+        # Invex doesn't support postOnly flag - all limit orders can become takers
+        # Need volatility-based price buffering to prevent accidental taker execution
 
         # Prepare body data with expire_at for signing
         # Invex requires expire_at in the request body

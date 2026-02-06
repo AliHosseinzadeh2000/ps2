@@ -21,8 +21,6 @@ from app.exchanges.exceptions import (
     ExchangeAPIError,
     ExchangeAuthenticationError,
     ExchangeNetworkError,
-    ExchangeOrderError,
-    ExchangeOrderNotFoundError,
 )
 from app.core.logging import get_logger
 from app.utils.retry import retry_with_backoff, RetryConfig
@@ -281,20 +279,20 @@ class NobitexExchange(ExchangeInterface):
         endpoint = "/v2/orders/add"
 
         # Nobitex order format
+        # NOTE: is_maker parameter is currently ignored (Phase 2 limitation)
+        # TODO PHASE 3: Implement proper maker/taker support with price buffering
+        # Nobitex doesn't support postOnly flag - all limit orders can become takers
         payload = {
             "type": side.lower(),  # 'buy' or 'sell'
-            "execution": "maker" if is_maker else "taker",
+            "execution": "taker",  # Always taker for now (Phase 2)
             "amount": str(quantity),
             "symbol": symbol,
         }
 
         if order_type == "limit":
             payload["price"] = str(price)
-        else:
-            payload["execution"] = "taker"  # Market orders are always taker
 
-        if is_maker and order_type == "limit":
-            payload["postOnly"] = True
+        # postOnly is NOT supported by Nobitex API - removed
 
         headers = self._get_headers(signed=True)
         headers["Authorization"] = f"Token {token}"
