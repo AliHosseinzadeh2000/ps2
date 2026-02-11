@@ -169,44 +169,29 @@ class InvexExchange(ExchangeInterface):
                 exchange_name="Invex",
             ) from e
 
-    def _get_headers(
-        self, method: str, path: str, signed: bool = False, body_data: Optional[Dict] = None
-    ) -> Dict[str, str]:
+    def _make_expire_at(self, minutes: int = 30) -> str:
+        """Generate expire_at timestamp in the format Invex expects."""
+        from datetime import timedelta
+        return (datetime.now() + timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _sign_dict(self, data_dict: Dict) -> str:
+        """Sign a dictionary using default JSON formatting (with spaces)."""
+        message = json.dumps(data_dict)
+        return self._generate_signature(message)
+
+    def _get_headers(self, signed: bool = False) -> Dict[str, str]:
         """
         Get request headers.
 
         Args:
-            method: HTTP method
-            path: API path
-            signed: Whether to include authentication headers
-            body_data: Request body data (for signing)
+            signed: Whether to include the API key header
 
         Returns:
             Headers dictionary
         """
         headers = {"Content-Type": "application/json"}
-        
-        if signed and self.api_key and self.api_secret:
-            # Add expire_at to body if not present
-            if body_data is None:
-                body_data = {}
-            
-            # expire_at should be ISO format datetime string without timezone (naive datetime)
-            # Invex API expects ISO format string, and it compares with timezone-naive datetimes
-            expire_at_timestamp = int(time.time()) + 60
-            expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
-            body_data["expire_at"] = expire_at_iso
-            
-            # Create message for signing (sorted JSON string)
-            message = json.dumps(body_data, sort_keys=True, separators=(",", ":"))
-            
-            # Generate signature
-            signature = self._generate_signature(message)
-            
+        if signed and self.api_key:
             headers["X-API-Key-Invex"] = self.api_key
-            headers["X-API-Sign"] = signature
-            headers["X-API-Expire-At"] = expire_at_iso
-        
         return headers
 
     @retry_with_backoff(config=_invex_retry_config)
@@ -256,7 +241,7 @@ class InvexExchange(ExchangeInterface):
             response = await client.get(
                 endpoint,
                 params=params,
-                headers=self._get_headers("GET", endpoint),
+                headers=self._get_headers(),
             )
             response.raise_for_status()
             data = response.json()
@@ -422,31 +407,16 @@ class InvexExchange(ExchangeInterface):
         # Invex doesn't support postOnly flag - all limit orders can become takers
         # Need volatility-based price buffering to prevent accidental taker execution
 
-        # Prepare body data with expire_at for signing
-        # Invex requires expire_at in the request body
-        expire_at_timestamp = int(time.time()) + 60
-        expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
-        payload["expire_at"] = expire_at_iso
-        
-        # Create message for signing (sorted JSON string, WITHOUT signature field)
-        # Signature must be generated from body BEFORE adding signature field
-        message = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        
-        # Generate signature from the message (without signature field)
-        signature = self._generate_signature(message)
-        
-        # According to Invex API error "You need to provide signature in your request body!",
-        # the signature must be included in the JSON body
+        # Add expire_at and sign the payload
+        payload["expire_at"] = self._make_expire_at()
+
+        # Sign payload BEFORE adding signature field
+        signature = self._sign_dict(payload)
+
+        # Add signature to body (Invex requires it in the request body)
         payload["signature"] = signature
-        
-        # Get headers - but we need to regenerate signature for headers since body now has signature
-        # Actually, headers signature should be from body WITHOUT signature field
-        # So we use the original message (without signature) for header signature
-        headers = {"Content-Type": "application/json"}
-        if self.api_key and self.api_secret:
-            headers["X-API-Key-Invex"] = self.api_key
-            headers["X-API-Sign"] = signature  # Same signature
-            headers["X-API-Expire-At"] = expire_at_iso
+
+        headers = self._get_headers(signed=True)
 
         try:
             logger.debug(f"Invex place_order: endpoint={endpoint}, payload={payload}")
@@ -518,7 +488,10 @@ class InvexExchange(ExchangeInterface):
         endpoint = f"/orders/{order_id}"
 
         payload = {"symbol": symbol}
-        headers = self._get_headers("DELETE", endpoint, signed=True, body_data=payload)
+        payload["expire_at"] = self._make_expire_at()
+        signature = self._sign_dict(payload)
+        payload["signature"] = signature
+        headers = self._get_headers(signed=True)
 
         try:
             response = await client.delete(
@@ -538,7 +511,7 @@ class InvexExchange(ExchangeInterface):
         Get account balance from Invex.
 
         Args:
-            currency: Specific currency (None for all)
+            currency: Specific currency (None for all). e.g. "USDT", "BTC", "IRR"
 
         Returns:
             Dictionary of balances
@@ -547,36 +520,51 @@ class InvexExchange(ExchangeInterface):
             raise Exception("Invex: API key and secret required for balance")
 
         client = await self._get_client()
-        endpoint = "/account"
+        endpoint = "/accounts"
 
-        headers = self._get_headers("GET", endpoint, signed=True)
+        expire_at = self._make_expire_at()
+
+        # Build data dict to sign (must match query params exactly)
+        data_to_sign = {"expire_at": expire_at}
+        if currency:
+            data_to_sign["currency"] = currency
+
+        signature = self._sign_dict(data_to_sign)
+
+        # GET request: signature and expire_at go as query parameters
+        params = {**data_to_sign, "signature": signature}
+        headers = self._get_headers(signed=True)
 
         try:
             response = await client.get(
                 endpoint,
                 headers=headers,
+                params=params,
             )
             response.raise_for_status()
             data = response.json()
 
             balances = {}
-            
-            # Invex response format may vary
-            wallets = []
-            if isinstance(data, dict):
-                wallets = data.get("wallets", []) or data.get("balances", []) or []
-            
-            for wallet in wallets:
-                if isinstance(wallet, dict):
-                    curr = wallet.get("currency", "").upper()
-                    if currency and curr != currency.upper():
-                        continue
 
-                    balances[curr] = Balance(
-                        currency=curr,
-                        available=float(wallet.get("available", wallet.get("free", 0))),
-                        locked=float(wallet.get("locked", wallet.get("blocked", 0))),
-                    )
+            # Invex returns a single account object: {"currency": "USDT", "available": "...", "blocked": "...", "total": "..."}
+            # Or potentially a list for all currencies
+            if isinstance(data, dict) and "currency" in data:
+                # Single currency response
+                curr = data.get("currency", "").upper()
+                balances[curr] = Balance(
+                    currency=curr,
+                    available=float(data.get("available", 0)),
+                    locked=float(data.get("blocked", 0)),
+                )
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        curr = item.get("currency", "").upper()
+                        balances[curr] = Balance(
+                            currency=curr,
+                            available=float(item.get("available", 0)),
+                            locked=float(item.get("blocked", 0)),
+                        )
 
             return balances
         except httpx.HTTPError as e:
@@ -604,28 +592,19 @@ class InvexExchange(ExchangeInterface):
         endpoint = "/orders"
         
         # Invex search orders requires expire_at and signature
-        expire_at_timestamp = int(time.time()) + 60
-        expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
-        params = {
-            "expire_at": expire_at_iso,
+        data_to_sign = {
+            "expire_at": self._make_expire_at(),
             "status": "NOT_FILLED",  # Open orders
             "page": 1,
             "page_size": 100,
         }
         if symbol:
-            # Convert symbol format
             invex_symbol = self._convert_symbol_format(symbol)
-            params["symbol"] = invex_symbol
+            data_to_sign["symbol"] = invex_symbol
 
-        # Create message for signing
-        body_data = {k: str(v) for k, v in params.items()}
-        message = json.dumps(body_data, sort_keys=True, separators=(",", ":"))
-        signature = self._generate_signature(message)
-
-        headers = self._get_headers("GET", endpoint)
-        headers["X-API-Key-Invex"] = self.api_key
-        headers["X-API-Sign"] = signature
-        headers["X-API-Expire-At"] = expire_at_iso
+        signature = self._sign_dict(data_to_sign)
+        params = {**data_to_sign, "signature": signature}
+        headers = self._get_headers(signed=True)
 
         try:
             response = await client.get(
@@ -686,23 +665,13 @@ class InvexExchange(ExchangeInterface):
         client = await self._get_client()
         endpoint = "/order"
         
-        # Invex get order requires expire_at and signature
-        expire_at_timestamp = int(time.time()) + 60
-        expire_at_iso = datetime.fromtimestamp(expire_at_timestamp).isoformat()
-        params = {
+        data_to_sign = {
             "order_id": order_id,
-            "expire_at": expire_at_iso,
+            "expire_at": self._make_expire_at(),
         }
-
-        # Create message for signing
-        body_data = {k: str(v) for k, v in params.items()}
-        message = json.dumps(body_data, sort_keys=True, separators=(",", ":"))
-        signature = self._generate_signature(message)
-
-        headers = self._get_headers("GET", endpoint)
-        headers["X-API-Key-Invex"] = self.api_key
-        headers["X-API-Sign"] = signature
-        headers["X-API-Expire-At"] = expire_at_iso
+        signature = self._sign_dict(data_to_sign)
+        params = {**data_to_sign, "signature": signature}
+        headers = self._get_headers(signed=True)
 
         try:
             response = await client.get(
@@ -781,7 +750,7 @@ class InvexExchange(ExchangeInterface):
             response = await client.get(
                 endpoint,
                 params=params,
-                headers=self._get_headers("GET", endpoint),
+                headers=self._get_headers(),
             )
             response.raise_for_status()
             data = response.json()

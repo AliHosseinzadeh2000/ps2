@@ -471,19 +471,21 @@ class WallexExchange(ExchangeInterface):
                 raise Exception(f"Wallex API error: {data}")
 
             result = data.get("result", {})
-            account_balances = result.get("balances", [])
+            account_balances = result.get("balances", {})
 
             balances = {}
-            for balance_data in account_balances:
-                curr = balance_data.get("asset", balance_data.get("currency", "")).upper()
-                if currency and curr != currency.upper():
-                    continue
+            # Wallex returns balances as a dict: {"BTC": {...}, "USDT": {...}}
+            if isinstance(account_balances, dict):
+                for curr, balance_data in account_balances.items():
+                    curr_upper = curr.upper()
+                    if currency and curr_upper != currency.upper():
+                        continue
 
-                balances[curr] = Balance(
-                    currency=curr,
-                    available=float(balance_data.get("free", balance_data.get("available", 0))),
-                    locked=float(balance_data.get("locked", balance_data.get("inOrder", 0))),
-                )
+                    balances[curr_upper] = Balance(
+                        currency=curr_upper,
+                        available=float(balance_data.get("value", 0)),
+                        locked=float(balance_data.get("locked", 0)),
+                    )
 
             return balances
         except httpx.HTTPError as e:
