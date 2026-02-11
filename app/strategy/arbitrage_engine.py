@@ -115,12 +115,22 @@ class ArbitrageEngine:
         buy_price = buy_orderbook.asks[0].price
         sell_price = sell_orderbook.bids[0].price
 
-        # Check if profitable
-        if sell_price <= buy_price:
+        # Normalize prices to common unit (Rial) for comparison
+        # Wallex uses Toman (1 TMN = 10 Rial), Nobitex/Invex use Rial
+        buy_quote = SymbolConverter.get_quote_currency(buy_orderbook.symbol) or ""
+        sell_quote = SymbolConverter.get_quote_currency(sell_orderbook.symbol) or ""
+        buy_to_rial = SymbolConverter.IRANIAN_CURRENCY_TO_RIAL.get(buy_quote.upper(), 1)
+        sell_to_rial = SymbolConverter.IRANIAN_CURRENCY_TO_RIAL.get(sell_quote.upper(), 1)
+
+        normalized_buy_price = buy_price * buy_to_rial
+        normalized_sell_price = sell_price * sell_to_rial
+
+        # Check if profitable (using normalized prices)
+        if normalized_sell_price <= normalized_buy_price:
             return None
 
-        # Calculate spread
-        spread_percent = calculate_spread_percent(buy_price, sell_price)
+        # Calculate spread (using normalized prices)
+        spread_percent = calculate_spread_percent(normalized_buy_price, normalized_sell_price)
 
         # Check minimum spread threshold
         if spread_percent < self.config.min_spread_percent:
@@ -136,10 +146,10 @@ class ArbitrageEngine:
         sell_quantity = sell_orderbook.bids[0].quantity
         max_quantity = min(buy_quantity, sell_quantity)
 
-        # Calculate profit
+        # Calculate profit using normalized prices (common unit for real P&L)
         net_profit, profit_percent = calculate_arbitrage_profit(
-            buy_price,
-            sell_price,
+            normalized_buy_price,
+            normalized_sell_price,
             max_quantity,
             buy_fee,
             sell_fee,
@@ -149,19 +159,19 @@ class ArbitrageEngine:
         if net_profit < self.config.min_profit_usdt:
             return None
 
-        # Check maximum position size
-        position_value = buy_price * max_quantity
+        # Check maximum position size (using normalized price)
+        position_value = normalized_buy_price * max_quantity
         if position_value > self.config.max_position_size_usdt:
             max_quantity = calculate_required_quantity(
                 self.config.max_position_size_usdt,
-                buy_price,
+                normalized_buy_price,
                 buy_fee,
             )
 
             # Recalculate profit with adjusted quantity
             net_profit, profit_percent = calculate_arbitrage_profit(
-                buy_price,
-                sell_price,
+                normalized_buy_price,
+                normalized_sell_price,
                 max_quantity,
                 buy_fee,
                 sell_fee,
@@ -171,8 +181,8 @@ class ArbitrageEngine:
             symbol=symbol,
             buy_exchange=buy_exchange_name,
             sell_exchange=sell_exchange_name,
-            buy_price=buy_price,
-            sell_price=sell_price,
+            buy_price=buy_price,       # Original exchange price (for order placement)
+            sell_price=sell_price,      # Original exchange price (for order placement)
             spread_percent=spread_percent,
             max_quantity=max_quantity,
             net_profit=net_profit,

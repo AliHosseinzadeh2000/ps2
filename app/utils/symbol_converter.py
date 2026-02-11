@@ -25,6 +25,33 @@ class SymbolConverter:
     # Iranian currency aliases (all refer to the same currency)
     IRANIAN_CURRENCY_ALIASES = ["IRT", "IRR", "TMN"]
 
+    # Price normalization to Rial (the base unit for comparison)
+    # Nobitex IRT = Rial, Invex IRR = Rial, Wallex TMN = Toman (1 Toman = 10 Rial)
+    IRANIAN_CURRENCY_TO_RIAL = {
+        "IRT": 1,    # Already in Rial
+        "IRR": 1,    # Already in Rial
+        "TMN": 10,   # 1 Toman = 10 Rial
+    }
+
+    @staticmethod
+    def get_price_normalization_factor(quote1: str, quote2: str) -> float:
+        """
+        Get the factor to multiply a price in quote1 to make it comparable to quote2.
+
+        For example, if quote1=TMN (Toman) and quote2=IRT (Rial):
+        returns 10 because 1 Toman = 10 Rial.
+
+        For non-Iranian or same currencies, returns 1.0.
+        """
+        rial_map = SymbolConverter.IRANIAN_CURRENCY_TO_RIAL
+        q1 = quote1.upper()
+        q2 = quote2.upper()
+
+        if q1 in rial_map and q2 in rial_map:
+            # Convert: price_in_q1 * (rial_per_q1 / rial_per_q2)
+            return rial_map[q1] / rial_map[q2]
+        return 1.0
+
     # Symbol format converters per exchange
     @staticmethod
     def convert_to_exchange_format(symbol: str, exchange: ExchangeName) -> str:
