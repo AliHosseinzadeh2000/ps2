@@ -7,7 +7,7 @@ from typing import Optional, Union
 from app.ai.features import extract_orderbook_features
 from app.core.exchange_types import ExchangeName
 from app.ai.predictor import TradingPredictor
-from app.core.config import TradingConfig
+from app.core.config import TradingConfig, settings
 from app.core.logging import get_logger
 from app.data.collector import DataCollector
 from app.db.db import get_session_factory
@@ -129,35 +129,71 @@ class OrderExecutor:
             )
             return None, None
 
-        # ========================================================================
-        # TODO PHASE 3: Re-enable maker/taker optimization with buffer strategy
-        # ========================================================================
-        # Currently DISABLED because:
-        # 1. Most Iranian exchanges don't support Post-Only flag reliably
-        # 2. Without proper price buffering, limit orders can become takers accidentally
-        # 3. This causes fee calculation mismatch (calculating with maker fees, paying taker fees)
-        #
-        # For Phase 3 implementation:
-        # - Implement volatility-based price buffering (Gemini's strategy)
-        # - Price = Best_Ask - (Base_Buffer + α × Volatility)
-        # - Add safety margin to prevent accidental taker execution
-        # - Monitor actual fees paid vs expected fees
-        # - Alert on unexpected taker fills
-        # ========================================================================
-
-        # FORCE TAKER MODE (safe and predictable execution)
-        buy_use_maker = False
-        sell_use_maker = False
+        # Determine maker/taker mode and prices
         buy_price = opportunity.buy_price
         sell_price = opportunity.sell_price
+        buy_use_maker = False
+        sell_use_maker = False
 
-        logger.info(
-            f"Using TAKER mode for both orders (maker optimization disabled until Phase 3)"
-        )
+        ai_enabled = settings.ai.enabled
+        buffer_pct = self.config.maker_price_buffer_percent / 100.0
 
-        # AI maker/taker prediction code DISABLED - preserved for Phase 3
-        # if use_maker is None and self.predictor and self.predictor.is_ready():
-        #     [AI prediction code here - see git history]
+        if use_maker is not None:
+            # Manual override (from API or tests)
+            buy_use_maker = use_maker
+            sell_use_maker = use_maker
+            if use_maker:
+                buy_price = opportunity.buy_price * (1 - buffer_pct)
+                sell_price = opportunity.sell_price * (1 + buffer_pct)
+            logger.info(f"Manual maker override: use_maker={use_maker}")
+
+        elif ai_enabled and self.predictor and self.predictor.is_ready():
+            # AI prediction from orderbooks
+            try:
+                # Reuse orderbooks from opportunity detection (no extra API calls)
+                if buy_orderbook is not None:
+                    buy_is_maker, buy_prob, _ = self.predictor.predict_from_orderbook(
+                        buy_orderbook
+                    )
+                    buy_use_maker = buy_is_maker
+                else:
+                    buy_is_maker, buy_prob = False, 0.0
+
+                if sell_orderbook is not None:
+                    sell_is_maker, sell_prob, _ = self.predictor.predict_from_orderbook(
+                        sell_orderbook
+                    )
+                    sell_use_maker = sell_is_maker
+                else:
+                    sell_is_maker, sell_prob = False, 0.0
+
+                # Apply price buffering for maker orders
+                if buy_use_maker:
+                    buy_price = opportunity.buy_price * (1 - buffer_pct)
+                if sell_use_maker:
+                    sell_price = opportunity.sell_price * (1 + buffer_pct)
+
+                logger.info(
+                    f"AI prediction: buy_maker={buy_use_maker} (prob={buy_prob:.3f}), "
+                    f"sell_maker={sell_use_maker} (prob={sell_prob:.3f})"
+                )
+
+                # Record predictions for monitoring
+                self.monitor.record_prediction(buy_use_maker, buy_prob)
+                self.monitor.record_prediction(sell_use_maker, sell_prob)
+
+            except Exception as e:
+                logger.warning(f"AI prediction failed, falling back to taker: {e}")
+                buy_use_maker = False
+                sell_use_maker = False
+                buy_price = opportunity.buy_price
+                sell_price = opportunity.sell_price
+        else:
+            # No AI available or disabled → taker mode
+            if not ai_enabled:
+                logger.debug("AI disabled via config, using taker mode")
+            else:
+                logger.debug("AI predictor not ready, using taker mode")
 
         # Convert symbol to exchange-specific format
         from app.utils.symbol_converter import ExchangeSymbolMapper

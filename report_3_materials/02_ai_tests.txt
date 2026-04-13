@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /home/ali/Desktop/ps2/ps2
+plugins: anyio-4.13.0, asyncio-1.3.0
+collecting ... collected 5 items
+
+tests/test_ai.py::test_extract_orderbook_features PASSED                 [ 20%]
+tests/test_ai.py::test_get_feature_names PASSED                          [ 40%]
+tests/test_ai.py::test_model_initialization PASSED                       [ 60%]
+tests/test_ai.py::test_model_predict_no_model PASSED                     [ 80%]
+tests/test_ai.py::test_model_save_load PASSED                            [100%]
+
+========================= 5 passed in 1.84s ============================

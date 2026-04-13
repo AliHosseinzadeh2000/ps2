@@ -1,0 +1,36 @@
+============================================================
+MODEL EVALUATION REPORT
+============================================================
+
+Model Type: XGBoost Binary Classifier
+Task:       Maker vs Taker Order Decision
+
+--- Test Set Metrics (20% holdout, 492 samples) ---
+  Accuracy:  64.0%
+  Precision: 59.4%
+  Recall:    69.6%
+  F1-Score:  64.1%
+  ROC-AUC:   0.6891
+
+--- Confusion Matrix ---
+                    Predicted
+                  Taker   Maker
+  Actual Taker  [   157     108 ]
+  Actual Maker  [    69     158 ]
+
+--- Cross-Validation (5-fold) ---
+  Accuracy:  62.8% ± 3.9%
+  F1-Score:  61.8% ± 4.0%
+  ROC-AUC:   0.6906 ± 0.0309
+
+--- Top 10 Feature Importances ---
+   1. spread_percent            7.26%  ==============
+   2. best_ask                  6.85%  =============
+   3. best_bid                  6.72%  =============
+   4. mid_price                 6.69%  =============
+   5. spread                    6.41%  ============
+   6. bid_depth                 5.75%  ===========
+   7. bid_vwap                  5.60%  ===========
+   8. ask_vwap                  5.53%  ===========
+   9. ask_price_std             5.13%  ==========
+  10. ask_depth                 5.01%  ==========

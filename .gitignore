@@ -77,3 +77,7 @@ get-pip.py
 
 proposal_text.txt
 ROADMAP.md
+
+# Claude Code
+.claude/
+conversations.html

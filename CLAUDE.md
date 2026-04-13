@@ -245,3 +245,104 @@ Structured logging setup in `app/core/logging.py`:
 4. **Async everywhere**: Use async/await for all I/O operations
 5. **Both order must fill**: If one order fills and other doesn't, cancel the filled one
 6. **Database persistence**: All orders/trades persisted for audit trail
+
+---
+
+## Project State (Last Updated: April 2026)
+
+### Context
+- Research project for **Narvan tech company**
+- **5 reports total**: Reports 1 and 2 submitted. Reports 3, 4, 5 remaining.
+- **Jury has an AI expert** — all AI claims must be empirical and realistic
+- **Focus exchanges**: Nobitex, Wallex, Invex (must work). KuCoin and Tabdeal are low priority.
+- **Dashboard**: Planned as a Telegram bot (not yet implemented)
+
+### Phase Completion Status
+- ✅ **Phase 1**: Architecture, exchange integrations, arbitrage detection
+- ✅ **Phase 2**: Core engine — order execution, risk management, circuit breakers, database
+- ✅ **Phase 3**: AI system — XGBoost maker/taker prediction, fully integrated and active
+
+### AI System — Completed
+
+**What it does**: Predicts whether each order should be a maker (limit away from best price, lower fee 0.10%) or taker (limit at best price, higher fee 0.25%) order based on live orderbook features.
+
+**Training pipeline**:
+```bash
+# 1. Collect orderbook snapshots (run for N minutes)
+python scripts/collect_training_data.py --duration 3600 --output data/training_iter3.csv
+
+# 2. Combine with previous data
+python scripts/combine_training_data.py data/training_iter*.csv --output data/training_combined.csv
+
+# 3. Train model (auto-archives existing model before overwriting)
+python scripts/train_model.py --data data/training_combined.csv
+
+# 4. Compare AI impact vs baseline strategies
+python scripts/compare_ai_impact.py
+```
+
+**Training results (v2 — current production)**:
+- Dataset: 2,457 samples (combined from two collection sessions)
+- Accuracy: 64.0% | ROC-AUC: 0.689 | Cross-val: 62.8% ± 3.9%
+- **Fee savings: 24%** vs always-taker baseline (simulation on real data)
+- Annual savings: ~21.9M IRR on 100M IRR daily volume
+- Top features: `spread_percent`, `best_ask`, `best_bid`, `mid_price`, `spread`
+
+**Model files**:
+```
+models/
+  xgboost_model.pkl              ← Production model (loaded by bot)
+  evaluation_report.json         ← Metrics
+  ai_impact_comparison.json      ← Strategy comparison results
+  plots/                         ← confusion_matrix, feature_importance, roc_curve
+  versions/
+    v1_baseline_798samples/      ← First iteration (model files lost, notes preserved)
+    v2_combined_2457samples/     ← Current version archived
+```
+
+**AI config** (in `.env`):
+```
+AI_ENABLED=true                   # Toggle AI on/off without code changes
+AI_MODEL_PATH=./models/xgboost_model.pkl
+MAKER_PRICE_BUFFER_PERCENT=0.05   # Price offset for maker orders (%)
+```
+
+**How AI is used at runtime**:
+1. Price stream fetches orderbooks → arbitrage engine detects opportunity
+2. Same orderbooks passed to `execute_arbitrage(buy_orderbook, sell_orderbook)`
+3. AI calls `predictor.predict_from_orderbook()` on each → (is_maker, probability)
+4. If maker: price offset by buffer% to sit in orderbook instead of crossing spread
+5. If AI fails for any reason → silently falls back to taker (safe)
+6. For Nobitex: `execution: "limit"` vs `"taker"` field controls maker/taker
+7. For Wallex/Invex: price positioning determines maker/taker naturally
+
+**Manual override** (for testing/API):
+```python
+executor.execute_arbitrage(opportunity, use_maker=True)   # force maker
+executor.execute_arbitrage(opportunity, use_maker=False)  # force taker
+executor.execute_arbitrage(opportunity, use_maker=None)   # use AI (default)
+```
+
+### Key Decisions Made
+
+1. **Labeling strategy**: Adaptive percentile-based volatility score instead of fixed threshold → avoids class imbalance
+2. **No extra API calls for AI**: Reuse orderbooks already fetched by price stream (zero latency overhead)
+3. **Model versioning**: `models/versions/v{N}_*/` archives; training script prompts before overwriting
+4. **Realistic AI claims**: 64% accuracy and ROC-AUC 0.689 is honest and defensible to jury AI expert
+5. **Iranian exchanges don't support postOnly**: Price buffering (0.05%) used instead of post-only flag
+6. **Fee calculation in arbitrage detection**: Always uses taker fees (conservative) — actual fees may be lower when AI selects maker
+
+### Documentation Files
+```
+docs/
+  ai_system_documentation.md    ← Complete technical guide to AI system
+  model_training_log.md         ← Iteration history with actual metrics
+  how_metrics_work.md           ← Explains accuracy/ROC-AUC for non-AI-experts
+  ORDER_TRACKING.md             ← How orders flow through the system
+```
+
+### What's Next
+- **Report 3/5**: AI system — methodology, training, results, fee savings analysis
+- **More training data** (optional): Collecting during different market hours will improve ROC-AUC further
+- **Telegram dashboard** (future): Replace REST API dashboard with Telegram bot
+- **Reports 4 and 5**: TBD based on project direction

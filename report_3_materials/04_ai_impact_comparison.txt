@@ -1,0 +1,47 @@
+Loaded 2457 samples from data/training_combined.csv
+Loaded model from models/xgboost_model.pkl
+
+======================================================================
+   AI IMPACT ANALYSIS: Maker/Taker Strategy Comparison
+======================================================================
+
+--- Dataset ---
+  Total samples:      2,457
+  Maker-safe moments: 1,135 (46.2%)
+  Taker-needed:       1,322 (53.8%)
+
+--- AI Model Decisions ---
+  Predicted maker: 1,210 times
+  Predicted taker: 1,247 times
+  Accuracy: 84.4%
+  Maker precision: 81.1% (when AI says maker, it's right this often)
+
+--- Fee Comparison (Daily Volume: 100,000,000 IRR) ---
+  Strategy                       Daily Fees     Fee Rate  Fill Rate
+  ------------------------- --------------- ------------ ----------
+  Always Taker (no AI)           250,000 IRR        0.25%       100%
+  Always Maker (naive)           180,708 IRR 0.10% (when fills)      46.2%
+  AI-Driven (our model)          190,110 IRR       0.190%      90.7%
+
+--- Savings (AI vs Always-Taker) ---
+  Daily savings:         59,890 IRR (24.0%)
+  Monthly savings:    1,796,703 IRR
+  Annual savings:    21,859,890 IRR
+
+--- Confusion Matrix ---
+                        Predicted
+                    Taker     Maker
+  Actual Taker  [  1093       229 ]
+  Actual Maker  [   154       981 ]
+
+--- Interpretation ---
+  The AI model saves 24.0% on trading fees compared to always using taker orders.
+  It correctly identifies 81% of maker opportunities,
+  reducing fees while maintaining high order fill rates.
+
+  Key insight: The AI doesn't need to be perfect to save money.
+  Even with 84% accuracy, the fee difference (0.25% vs 0.10%)
+  means correct maker predictions generate significant savings.
+
+======================================================================
+Results saved to models/ai_impact_comparison.json

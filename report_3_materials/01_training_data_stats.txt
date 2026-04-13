@@ -1,0 +1,44 @@
+============================================================
+TRAINING DATA STATISTICS
+============================================================
+
+--- Iteration 1 (15 minutes collection) ---
+  Samples:        798
+  Features:       19
+  Maker (label=1): 547 (68.5%)
+  Taker (label=0): 251 (31.5%)
+
+--- Iteration 2 (60 minutes collection) ---
+  Samples:        2,737
+  Features:       19
+  Maker (label=1): 1,369 (50.0%)
+  Taker (label=0): 1,368 (50.0%)
+
+--- Combined Dataset ---
+  Total before dedup: 3,535
+  Duplicates removed: 1,078
+  Final samples:      2,457
+  Features:           19
+  Maker (label=1): 1,135 (46.2%)
+  Taker (label=0): 1,322 (53.8%)
+
+--- Feature Names (19 orderbook features) ---
+   1. ask_depth
+   2. ask_price_levels
+   3. ask_price_std
+   4. ask_vwap
+   5. best_ask
+   6. best_bid
+   7. bid_depth
+   8. bid_price_levels
+   9. bid_price_std
+  10. bid_vwap
+  11. buy_pressure
+  12. buy_pressure_10
+  13. depth_imbalance
+  14. mid_price
+  15. pressure_ratio
+  16. sell_pressure
+  17. sell_pressure_10
+  18. spread
+  19. spread_percent

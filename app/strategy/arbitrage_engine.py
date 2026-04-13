@@ -136,8 +136,8 @@ class ArbitrageEngine:
         if spread_percent < self.config.min_spread_percent:
             return None
 
-        # Get fees - ALWAYS use taker fees (Phase 2: maker mode disabled)
-        # TODO PHASE 3: Use maker fees when buffer strategy is implemented
+        # Use taker fees for opportunity detection (conservative estimate).
+        # Actual fees may be lower if AI selects maker mode during execution.
         buy_fee = buy_exchange.get_taker_fee()
         sell_fee = sell_exchange.get_taker_fee()
 

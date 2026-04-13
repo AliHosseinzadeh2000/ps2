@@ -279,12 +279,11 @@ class NobitexExchange(ExchangeInterface):
         endpoint = "/v2/orders/add"
 
         # Nobitex order format
-        # NOTE: is_maker parameter is currently ignored (Phase 2 limitation)
-        # TODO PHASE 3: Implement proper maker/taker support with price buffering
-        # Nobitex doesn't support postOnly flag - all limit orders can become takers
+        # execution: "taker" = fills immediately at best price
+        # execution: "limit" = sits in orderbook as maker (lower fees)
         payload = {
             "type": side.lower(),  # 'buy' or 'sell'
-            "execution": "taker",  # Always taker for now (Phase 2)
+            "execution": "limit" if is_maker else "taker",
             "amount": str(quantity),
             "symbol": symbol,
         }

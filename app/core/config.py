@@ -139,6 +139,7 @@ class TradingConfig(BaseSettings):
     per_trade_loss_limit: float = Field(default=50.0, ge=0.0)  # Max loss per trade
     max_drawdown_percent: float = Field(default=5.0, ge=0.0, le=100.0)  # Max drawdown percentage
     max_slippage_percent: float = Field(default=0.5, ge=0.0, le=10.0)
+    maker_price_buffer_percent: float = Field(default=0.05, ge=0.0, le=1.0)
     require_balance_check: bool = Field(default=True)
     trading_halted: bool = Field(default=False)  # Manual trading halt flag
 
@@ -159,6 +160,7 @@ class AIConfig(BaseSettings):
     )
     feature_count: int = Field(default=20, ge=1)
     prediction_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    enabled: bool = Field(default=True, env="AI_ENABLED")
 
     class Config:
         """Pydantic config."""

@@ -197,28 +197,119 @@ The API will be available at `http://localhost:8000`. Interactive API documentat
 
 ### Training the AI Model
 
-1. Prepare training data in CSV format with features and labels:
-   - Feature columns: orderbook and OHLC features
-   - Label column: `label` or `is_maker` (0=taker, 1=maker)
+The AI model training follows an **iterative improvement methodology**: collect data, train, evaluate, collect more data, retrain, compare results. This demonstrates empirical machine learning best practices.
 
-2. Train the model via API:
+#### Step 1: Collect Training Data
+
+Collect real orderbook snapshots from live exchanges:
+
+```bash
+# First collection (15-30 minutes recommended for baseline)
+python scripts/collect_training_data.py --duration 1800 --output data/training_iter1.csv
+
+# Second collection (1 hour for improved diversity)
+python scripts/collect_training_data.py --duration 3600 --output data/training_iter2.csv
+
+# Third collection if needed
+python scripts/collect_training_data.py --duration 3600 --output data/training_iter3.csv
+```
+
+**What this does:**
+- Fetches orderbook snapshots from Nobitex, Wallex, and Invex every 4-5 seconds
+- Extracts 19 orderbook features (spread, depth, VWAP, pressure indicators)
+- Generates labels using adaptive percentile-based strategy
+- Saves to CSV with features + label column
+
+#### Step 2: Combine Multiple Datasets (for iterative improvement)
+
+Combine data from multiple collection sessions:
+
+```bash
+# Combine all iterations into one dataset
+python scripts/combine_training_data.py data/training_iter*.csv --output data/training_combined.csv
+```
+
+**Why combine datasets?**
+- More samples = better model generalization
+- Different time periods capture diverse market conditions (calm + volatile)
+- Typical improvement: 800 samples (63% accuracy) → 3,200 samples (68-72% accuracy)
+
+**The script automatically:**
+- Loads all specified CSV files
+- Removes duplicate samples
+- Shows label distribution for each dataset
+- Reports combined statistics
+- Saves merged dataset
+
+#### Step 3: Train the Model
+
+Train XGBoost classifier with full evaluation:
+
+```bash
+# Train on combined dataset
+python scripts/train_model.py --data data/training_combined.csv
+
+# Or train on single iteration
+python scripts/train_model.py --data data/training_iter1.csv
+```
+
+**This generates:**
+- `models/xgboost_model.pkl` - Trained model (auto-loaded by bot)
+- `models/evaluation_report.json` - Metrics (accuracy, ROC-AUC, etc.)
+- `models/plots/` - 3 visualizations (confusion matrix, feature importance, ROC curve)
+
+**Evaluation metrics shown:**
+- Accuracy, Precision, Recall, F1-Score
+- ROC-AUC curve
+- 5-fold cross-validation results
+- Confusion matrix
+- Feature importance rankings
+
+#### Step 4: Track Improvements
+
+Keep all iterations as records to show the improvement process:
+
+```
+data/
+├── training_iter1.csv          # Baseline (e.g., 798 samples, 63% accuracy)
+├── training_iter2.csv          # Second run (e.g., 2,400 samples)
+├── training_combined.csv       # Combined dataset (e.g., 3,200 samples, 68% accuracy)
+
+models/
+├── iter1_baseline/             # First model results
+│   ├── xgboost_model.pkl
+│   ├── evaluation_report.json
+│   └── plots/
+├── iter2_improved/             # Second model results
+│   ├── xgboost_model.pkl
+│   ├── evaluation_report.json
+│   └── plots/
+└── xgboost_model.pkl          # Current production model (latest)
+```
+
+See `docs/model_training_log.md` for detailed iteration results and methodology.
+
+#### Alternative: Train via API
+
+You can also train via the REST API:
+
 ```bash
 curl -X POST "http://localhost:8000/ai/train" \
   -H "Content-Type: application/json" \
   -d '{
-    "data_path": "./data/training_data.csv",
+    "data_path": "./data/training_combined.csv",
     "test_size": 0.2,
     "random_state": 42
   }'
 ```
 
-Or use Python:
+Or use Python directly:
 ```python
 from app.ai.trainer import ModelTrainer
 from app.core.config import settings
 
 trainer = ModelTrainer(settings.ai)
-model, metrics, feature_names = trainer.train_from_csv()
+model, metrics, feature_names = trainer.train_from_csv("data/training_combined.csv")
 trainer.save_model(model, feature_names)
 ```
 
