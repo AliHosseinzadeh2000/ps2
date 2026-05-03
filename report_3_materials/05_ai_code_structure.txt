@@ -1,0 +1,54 @@
+===========================================
+AI System Code Structure (فاز ۳)
+===========================================
+
+app/ai/
+├── features.py     — استخراج ۱۹ ویژگی از orderbook
+│                     (spread, depth, VWAP, pressure, imbalance)
+├── model.py        — XGBoostModel: بارگذاری و پیش‌بینی
+├── predictor.py    — رابط اصلی: predict_from_orderbook()
+│                     (مدیریت خطا + fallback به taker)
+└── trainer.py      — آموزش مدل از CSV
+
+scripts/
+├── collect_training_data.py   — جمع‌آوری snapshot از صرافی‌های واقعی
+│                                 (هر ۴-۵ ثانیه یک نمونه)
+├── combine_training_data.py   — ترکیب چند فایل CSV + حذف تکراری
+├── train_model.py             — آموزش با ارزیابی کامل + auto-versioning
+│                                 (قبل از ذخیره، نسخه قبلی archive می‌شود)
+└── compare_ai_impact.py       — مقایسه AI با baseline‌ها + محاسبه صرفه‌جویی
+
+models/
+├── xgboost_model.pkl          — مدل تولیدی فعلی
+├── evaluation_report.json     — معیارهای ارزیابی
+├── ai_impact_comparison.json  — مقایسه استراتژی‌ها
+├── plots/
+│   ├── confusion_matrix.png
+│   ├── feature_importance.png
+│   └── roc_curve.png
+└── versions/
+    ├── v1_baseline_798samples/     — تکرار ۱ (بایگانی)
+    └── v2_combined_2457samples/    — تکرار ۲ (بایگانی — نسخه فعلی)
+
+===========================================
+یکپارچه‌سازی در app/strategy/order_executor.py
+===========================================
+
+جریان تصمیم‌گیری:
+  1. Arbitrage Engine فرصت را شناسایی می‌کند
+  2. همان orderbook به AI Predictor پاس داده می‌شود
+  3. AI پیش‌بینی می‌کند: maker یا taker؟
+  4. اگر maker: قیمت 0.05% buffer اعمال می‌شود
+  5. اگر AI fail کند: fallback خودکار به taker
+
+هیچ درخواست شبکه‌ای اضافی وجود ندارد.
+استنتاج XGBoost: < 1 میلی‌ثانیه
+
+===========================================
+تنظیمات (متغیرهای محیطی)
+===========================================
+
+AI_ENABLED=true                    # فعال/غیرفعال کردن AI
+AI_MODEL_PATH=./models/xgboost_model.pkl
+MAKER_PRICE_BUFFER_PERCENT=0.05    # buffer قیمت برای maker orders
+

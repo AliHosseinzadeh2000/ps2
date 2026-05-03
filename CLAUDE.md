@@ -252,7 +252,7 @@ Structured logging setup in `app/core/logging.py`:
 
 ### Context
 - Research project for **Narvan tech company**
-- **5 reports total**: Reports 1 and 2 submitted. Reports 3, 4, 5 remaining.
+- **5 reports total**: Reports 1 and 2 submitted. **Report 3 ready to submit.** Reports 4, 5 remaining.
 - **Jury has an AI expert** — all AI claims must be empirical and realistic
 - **Focus exchanges**: Nobitex, Wallex, Invex (must work). KuCoin and Tabdeal are low priority.
 - **Dashboard**: Planned as a Telegram bot (not yet implemented)
@@ -341,8 +341,21 @@ docs/
   ORDER_TRACKING.md             ← How orders flow through the system
 ```
 
+### Report 3 Materials
+All materials are in `report_3_materials/`:
+- `report_3_content.md` — full Persian report (~15 pages), matches format of reports 1 & 2
+- `01_training_data_stats.txt` — training data stats (paste into section ۴)
+- `02_ai_tests.txt` — pytest output for AI module (paste into section ۸)
+- `03_model_evaluation.txt` — model metrics, confusion matrix, feature importance (paste into section ۵)
+- `04_ai_impact_comparison.txt` — fee comparison simulation (paste into section ۶)
+- `05_ai_code_structure.txt` — code structure overview (paste into section ۳)
+- `defense_prep.md` — jury Q&A prep with 11 hard questions and honest answers
+- `project_timeline.md` — project phases and current position
+
+`generate_report_3_materials.sh` exists but user prefers to manually paste existing .txt files.
+
 ### What's Next
-- **Report 3/5**: AI system — methodology, training, results, fee savings analysis
+- **Report 3**: Ready to submit
 - **More training data** (optional): Collecting during different market hours will improve ROC-AUC further
-- **Telegram dashboard** (future): Replace REST API dashboard with Telegram bot
+- **Telegram dashboard (Report 4)**: Replace REST API with Telegram bot
 - **Reports 4 and 5**: TBD based on project direction
